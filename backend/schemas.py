@@ -1,6 +1,7 @@
 """Strict API contracts. Clients cannot assign roles or moderation status."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+import re
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -9,22 +10,24 @@ class StrictModel(BaseModel):
 
 class Credentials(StrictModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-    email: EmailStr
-    password: str = Field(min_length=10, max_length=128)
+    email: str
+    password: str = ''
 
     @field_validator('email')
     @classmethod
     def normalize_email(cls, value):
-        return str(value).lower()
+        value=value.strip().lower()
+        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',value):raise ValueError('Введите email в формате name@mail.ru')
+        return value
 
 
 class Registration(Credentials):
-    name: str = Field(min_length=2, max_length=60)
+    name: str = ''
 
     @field_validator('name', mode='before')
     @classmethod
     def clean_name(cls, value):
-        return value.strip() if isinstance(value, str) else value
+        return (value.strip() or 'Житель') if isinstance(value, str) else value
 
 
 class Values(StrictModel):
@@ -49,12 +52,29 @@ class Action(StrictModel):
 
 
 class Preview(StrictModel):
-    action: Action
+    action: Action | None = None
+    actions: list[Action] | None = Field(default=None, min_length=1, max_length=20)
     base_version: int = Field(ge=0)
+
+    @model_validator(mode='after')
+    def exactly_one_form(self):
+        if (self.action is None)==(self.actions is None):
+            raise ValueError('Передайте одно действие или набор от 1 до 20 изменений')
+        return self
+
+    def changes(self):
+        return [a.model_dump(exclude_none=True) for a in (self.actions or [self.action])]
+
+    def stored_action(self):
+        return {'actions':self.changes()} if self.actions is not None else self.changes()[0]
+
+
+class BudgetUpdate(StrictModel):
+    limit: int = Field(ge=0, le=1_000_000_000_000, strict=True)
 
 
 class Proposal(Preview):
-    reason: str = Field(min_length=10, max_length=1000)
+    reason: str = Field(default='', max_length=1000)
 
 
 class Decision(StrictModel):

@@ -13,6 +13,7 @@ export default function CityMap(props){
   const container=useRef(),map=useRef(),latest=useRef(props),layers=useRef({});latest.current=props;
   useEffect(()=>{
     const instance=L.map(container.current,{preferCanvas:true,minZoom:12,maxZoom:19,zoomControl:true,maxBounds:[[55.06,36.55],[55.16,36.69]],maxBoundsViscosity:.8}).setView([55.108,36.612],14);
+    instance.attributionControl.setPrefix('<a href="https://leafletjs.com" title="Interactive maps">Leaflet</a>');
     map.current=instance;
     layers.current.roadsData=[];
     const labels=addMapLabels(instance,()=>latest.current.state.objects,()=>layers.current.roadsData,()=>latest.current.selectedHome);layers.current.labels=labels;
@@ -38,11 +39,11 @@ export default function CityMap(props){
       layer.on('click',()=>{
         const current=latest.current;
         if(!current.compact&&['add_object','move_stop'].includes(current.mode)){if(current.mode==='move_stop'&&obj.kind==='stop')current.onMoveStop(obj);else current.onPlace(xy(L.latLng(latlng(obj))));return;}
-        if(current.mode==='delete'&&!current.compact){current.onSelect('object',obj);return;}
+        if(current.mode==='delete'&&!current.compact&&obj.demolition?.allowed!==false){current.onSelect('object',obj);return;}
         if(obj.kind==='home')current.setSelectedHome(obj.id);
         const box=document.createElement('div'),name=document.createElement('strong'),note=document.createElement('p');
-        name.textContent=obj.name;note.textContent=kinds[obj.kind]+(obj.kind==='home'?` · ≈${obj.residents} жителей (оценка)`:'' );box.append(name,note);
-        if(!current.compact){const button=document.createElement('button');button.className='map-proposal-button';button.textContent=obj.geom&&obj.kind!=='park'?'Предложить снос':'Предложить удаление';button.onclick=()=>{instance.closePopup();latest.current.onSelect('object',obj);};box.append(button);if(obj.kind==='stop'){const move=document.createElement('button');move.className='map-proposal-button';move.textContent='Предложить перенос';move.onclick=()=>{instance.closePopup();latest.current.onMoveStop(obj);};box.append(move);}}
+        name.textContent=obj.name;note.textContent=kinds[obj.kind]+(obj.kind==='home'?` · ≈${obj.residents} жителей (оценка)`:'' );box.append(name,note);if(obj.demolition){const cost=document.createElement('p');cost.textContent=`Снос: ${obj.demolition.amount.toLocaleString('ru-RU')} ₽ · порог ${obj.demolition.limit.toLocaleString('ru-RU')} ₽. Площадь ${obj.demolition.area_m2} м² · жителей ${obj.demolition.residents} · коэффициент расположения ${obj.demolition.location_factor}. ${obj.demolition.reason||'Снос допустим по цене.'}`;if(!obj.demolition.allowed)cost.className='demolition-denied';box.append(cost);}
+        if(!current.compact){const button=document.createElement('button');button.className='map-proposal-button';button.disabled=obj.demolition?.allowed===false;button.textContent=button.disabled?'Снос запрещён по цене':obj.geom&&obj.kind!=='park'?'Предложить снос':'Предложить удаление';button.onclick=()=>{instance.closePopup();latest.current.onSelect('object',obj);};box.append(button);if(obj.kind==='stop'){const move=document.createElement('button');move.className='map-proposal-button';move.textContent='Предложить перенос';move.onclick=()=>{instance.closePopup();latest.current.onMoveStop(obj);};box.append(move);}}
         L.popup().setLatLng(latlng(obj)).setContent(box).openOn(instance);
       });
     };

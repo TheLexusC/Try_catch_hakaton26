@@ -1,5 +1,6 @@
 """FastAPI entry point: uvicorn backend.main:app --host 127.0.0.1 --port 8000."""
 import argparse
+import getpass
 import hashlib
 import hmac
 import os
@@ -14,13 +15,15 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from .data import DATABASE, METADATA, apply_action, connect, initialize, read_state, write_state, save_change
 from .seed import DISTRICT
 from .metrics import calculate_metrics
-from .schemas import Credentials, Decision, Preview, Proposal, Registration
+from .planning import plan_changes, PRICES, LABELS, annotate_costs, blocking_reason
+from .schemas import Credentials, Decision, Preview, Proposal, Registration, BudgetUpdate
 
 SESSION_TTL = 7 * 24 * 3600
 COOKIE = 'obninsk_session'
@@ -65,15 +68,24 @@ def create_app(db_path=DATABASE):
     app.state.db_path = str(db_path)
     app.add_middleware(GZipMiddleware,minimum_size=1000)
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, error):
+        labels={'email':'Email','password':'Пароль','name':'Имя'}
+        messages=[]
+        for item in error.errors():
+            field=item['loc'][-1];kind=item['type'];message=item['msg']
+            if kind=='string_too_short':message=f"минимум {item.get('ctx',{}).get('min_length')} символов"
+            elif kind=='string_too_long':message=f"максимум {item.get('ctx',{}).get('max_length')} символов"
+            elif kind=='missing':message='заполните обязательное поле'
+            elif kind=='extra_forbidden':message='недопустимое поле'
+            elif kind=='value_error':message=message.removeprefix('Value error, ')
+            messages.append(f"{labels.get(field,field)}: {message}")
+        return JSONResponse({'detail':'; '.join(messages)},status_code=422)
+
     @app.middleware('http')
     async def request_policy(request: Request, call_next):
         if request.url.path.startswith('/api/'):
             if request.method in {'POST', 'PUT', 'DELETE', 'PATCH'}:
-                # Same-origin API only. Vite proxy keeps browser requests same-origin.
-                origin = request.headers.get('origin')
-                allowed = set(os.environ.get('OBNINSK_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000').split(','))
-                if origin and origin not in allowed:
-                    return JSONResponse({'detail': 'Недопустимый источник запроса'}, status_code=403)
                 if not request.headers.get('content-type', '').lower().startswith('application/json'):
                     return JSONResponse({'detail': 'Требуется application/json'}, status_code=415)
                 # Enforce the actual size as well as the declared length, including chunked requests.
@@ -130,7 +142,7 @@ def create_app(db_path=DATABASE):
         return dict(user)
 
     def moderator(user=Depends(current_session)):
-        if user['role'] != 'moderator':
+        if user['role'] not in {'moderator','admin'}:
             raise HTTPException(403, 'Доступно только модератору')
         return user
 
@@ -138,7 +150,7 @@ def create_app(db_path=DATABASE):
         if state['version'] != payload.base_version:
             raise HTTPException(409, 'Карта обновилась. Обновите карту и создайте новое предложение.')
         try:
-            return apply_action(state, payload.action.model_dump(exclude_none=True))
+            return plan_changes(state, payload.changes())
         except PermissionError as error:
             raise HTTPException(403,str(error)) from error
         except ValueError as error:
@@ -146,6 +158,7 @@ def create_app(db_path=DATABASE):
 
     def serialize_proposal(row):
         result = dict(row)
+        result['actions']=row['action'].get('actions',[row['action']])
         return result
 
     @app.get('/api/health')
@@ -200,14 +213,29 @@ def create_app(db_path=DATABASE):
     def city():
         with connect(db_path) as db:
             state = read_state(db)
-        return {'map': METADATA, 'state': state, 'metrics': calculate_metrics(state)}
+        return {'map': METADATA, 'state': state, 'metrics': calculate_metrics(state),'demolition_costs':annotate_costs(state)}
+
+    @app.get('/api/budget', include_in_schema=False)
+    @app.get('/api/demolition-policy')
+    def get_demolition_policy():
+        with connect(db_path) as db:policy=read_state(db)['demolition_policy']
+        return {**policy,'mode':'per_building','note':'Порог стоимости сноса одного здания. Общего бюджета нет.'}
+
+    @app.post('/api/budget', include_in_schema=False)
+    @app.post('/api/demolition-policy')
+    def change_demolition_policy(payload: BudgetUpdate, user=Depends(moderator)):
+        with connect(db_path) as db:
+            state=read_state(db,write=True);old=state['demolition_policy']['limit']
+            db.execute('UPDATE districts SET demolition_limit=%s WHERE id=%s',(payload.limit,DISTRICT))
+            db.execute('INSERT INTO demolition_policy_history(district_id,moderator_id,old_limit,new_limit,created_at) VALUES(%s,%s,%s,%s,%s)',
+                       (DISTRICT,user['id'],old,payload.limit,now()))
+        return {'limit':payload.limit,'mode':'per_building'}
 
     @app.post('/api/preview')
     def preview(payload: Preview, user=Depends(current_session)):
-        with connect(db_path) as db:
-            state = read_state(db)
-        after = checked_change(state, payload)
-        return {'before': calculate_metrics(state), 'after': calculate_metrics(after), 'state': after}
+        with connect(db_path) as db:state = read_state(db)
+        after,estimate = checked_change(state, payload)
+        return {'before': calculate_metrics(state), 'after': calculate_metrics(after), 'state': after,'estimate':estimate}
 
     @app.post('/api/proposals', status_code=201)
     def submit(payload: Proposal, user=Depends(current_session)):
@@ -215,17 +243,18 @@ def create_app(db_path=DATABASE):
         with connect(db_path) as db:
             db.execute('SELECT pg_advisory_xact_lock(204027)')
             state = read_state(db, write=True)
-            checked_change(state, payload)
-            action = Jsonb(payload.action.model_dump(exclude_none=True))
+            after,estimate=checked_change(state, payload)
+            if not estimate['can_submit']:
+                raise HTTPException(422,blocking_reason(estimate))
+            action = Jsonb(payload.stored_action())
             duplicate = db.execute("SELECT id FROM proposals WHERE author_id=%s AND district_id=%s AND action=%s AND status='pending'", (user['id'], DISTRICT, action)).fetchone()
-            if duplicate:
-                raise HTTPException(409, 'Такое предложение уже ожидает модерации')
+            if duplicate:raise HTTPException(409, 'Такое предложение уже ожидает модерации')
             pending = db.execute("SELECT count(*) FROM proposals WHERE author_id=%s AND status='pending'", (user['id'],)).fetchone()['count']
-            if pending >= 20:
-                raise HTTPException(429, 'У вас уже 20 заявок на модерации. Дождитесь решения.')
-            db.execute('''INSERT INTO proposals(id,district_id,author_id,action,reason,base_version,created_at,target_name)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s)''', (proposal_id, DISTRICT, user['id'], action, payload.reason, payload.base_version, now(), next((o['name'] for o in state['objects'] if o['id']==payload.action.id), payload.action.values.name or 'Пешеходный участок')))
-        return {'id': proposal_id, 'status': 'pending', 'message': 'Отправлено на модерацию. Изменение ещё не применено.'}
+            if pending >= 20:raise HTTPException(429, 'У вас уже 20 заявок на модерации. Дождитесь решения.')
+            target_name=estimate['lines'][0]['name'] if len(estimate['lines'])==1 else f"Набор из {len(estimate['lines'])} изменений"
+            db.execute('''INSERT INTO proposals(id,district_id,author_id,action,reason,base_version,created_at,target_name,estimated_cost)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (proposal_id, DISTRICT, user['id'], action, payload.reason.strip() or 'Предложение изменений городской инфраструктуры.', payload.base_version, now(), target_name,estimate['total']))
+        return {'id': proposal_id, 'status': 'pending', 'message': 'Набор отправлен на модерацию. Изменения ещё не применены.'}
 
     @app.get('/api/proposals')
     def list_proposals(user=Depends(current_session)):
@@ -234,7 +263,7 @@ def create_app(db_path=DATABASE):
             LEFT JOIN users reviewer ON reviewer.id=proposals.reviewer_id'''
         query += ' WHERE proposals.district_id=%s'
         args = (DISTRICT,)
-        if user['role'] != 'moderator':
+        if user['role'] not in {'moderator','admin'}:
             query += ' AND proposals.author_id=%s'
             args += (user['id'],)
         query += ' ORDER BY proposals.created_at DESC'
@@ -251,9 +280,9 @@ def create_app(db_path=DATABASE):
             raise HTTPException(404, 'Заявка не найдена')
         if row['status'] != 'pending':
             raise HTTPException(409, 'Заявка уже закрыта')
-        payload = Preview(action=row['action'], base_version=row['base_version'])
-        after = checked_change(state, payload)
-        return {'before': calculate_metrics(state), 'after': calculate_metrics(after), 'state': after}
+        payload = Preview(**({'actions':row['action']['actions']} if 'actions' in row['action'] else {'action':row['action']}),base_version=row['base_version'])
+        after,estimate = checked_change(state, payload)
+        return {'before': calculate_metrics(state), 'after': calculate_metrics(after), 'state': after,'estimate':estimate}
 
     @app.post('/api/proposals/{proposal_id}/decision')
     def decide(proposal_id: str, payload: Decision, user=Depends(moderator)):
@@ -270,11 +299,13 @@ def create_app(db_path=DATABASE):
             applied_version = None
             if payload.decision == 'approved':
                 state = read_state(db, write=True)
-                change = Preview(action=row['action'], base_version=row['base_version'])
-                after = checked_change(state, change)
+                change = Preview(**({'actions':row['action']['actions']} if 'actions' in row['action'] else {'action':row['action']}),base_version=row['base_version'])
+                after,estimate = checked_change(state, change)
+                if not estimate['can_submit']:raise HTTPException(409,'Одобрение невозможно: доступного бюджета больше не хватает')
                 after['version'] += 1
                 applied_version = after['version']
-                save_change(db, after, change.action.model_dump(exclude_none=True))
+                for action in change.changes():save_change(db, after, action)
+                db.execute('UPDATE proposals SET estimated_cost=%s WHERE id=%s',(estimate['total'],proposal_id))
             closed_at = now()
             db.execute('''UPDATE proposals SET status=%s,closed_at=%s,reviewer_id=%s,comment=%s,applied_version=%s
                 WHERE id=%s''', (payload.decision, closed_at, user['id'], payload.comment, applied_version, proposal_id))
@@ -294,12 +325,27 @@ def create_app(db_path=DATABASE):
 app = create_app()
 
 
+def create_admin(email, password, db_path=DATABASE):
+    account=Registration(email=email,password=password,name='Администратор Обнинск 2040')
+    user={'id':str(uuid.uuid4()),'email':account.email,'name':account.name,'role':'admin',
+          'password_hash':hash_password(account.password),'created_at':now()}
+    with connect(db_path) as db:
+        db.execute('INSERT INTO users(id,email,name,role,password_hash,created_at) VALUES(%(id)s,%(email)s,%(name)s,%(role)s,%(password_hash)s,%(created_at)s)',user)
+    return public_user(user)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Управление локальным проектом Обнинск 2040')
-    parser.add_argument('command', choices=['promote'])
+    parser.add_argument('command', choices=['promote','create-admin'])
     parser.add_argument('email', help='Email уже зарегистрированного пользователя')
     args = parser.parse_args()
     initialize(DATABASE)
+    if args.command=='create-admin':
+        password=getpass.getpass('Пароль администратора: ')
+        if password!=getpass.getpass('Повторите пароль: '):parser.exit(1,'Пароли не совпадают.\n')
+        try:create_admin(args.email,password)
+        except psycopg.errors.UniqueViolation:parser.exit(1,'Этот email уже занят. Аккаунт не изменён.\n')
+        print('Администратор создан. Войдите на сайте.');return
     with connect(DATABASE) as db:
         result = db.execute("UPDATE users SET role='moderator' WHERE email=%s", (args.email.strip().lower(),))
         if result.rowcount != 1:

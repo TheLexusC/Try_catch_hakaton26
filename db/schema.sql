@@ -74,3 +74,23 @@ CREATE TABLE IF NOT EXISTS demolitions (
     district_id text NOT NULL REFERENCES districts(id), id text NOT NULL,
     name text NOT NULL, geom jsonb NOT NULL, PRIMARY KEY(district_id,id)
 );
+
+-- Shared city budget, in whole RUB. Existing accounts and proposals remain valid.
+ALTER TABLE districts ADD COLUMN IF NOT EXISTS budget_limit bigint NOT NULL DEFAULT 10000000 CHECK(budget_limit>=0);
+ALTER TABLE districts ADD COLUMN IF NOT EXISTS budget_spent bigint NOT NULL DEFAULT 0 CHECK(budget_spent>=0 AND budget_spent<=budget_limit);
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS estimated_cost bigint NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS budget_history (
+    id bigserial PRIMARY KEY, district_id text NOT NULL REFERENCES districts(id),
+    moderator_id text NOT NULL REFERENCES users(id), old_limit bigint NOT NULL, new_limit bigint NOT NULL, created_at text NOT NULL
+);
+
+-- Admin has moderation and budget rights, never assignable through public registration.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK(role IN ('user','moderator','admin'));
+
+-- Per-building demolition threshold; previous aggregate budget columns are historical only.
+ALTER TABLE districts ADD COLUMN IF NOT EXISTS demolition_limit bigint NOT NULL DEFAULT 10000000 CHECK(demolition_limit>=0);
+CREATE TABLE IF NOT EXISTS demolition_policy_history (
+ id bigserial PRIMARY KEY, district_id text NOT NULL REFERENCES districts(id),
+ moderator_id text NOT NULL REFERENCES users(id), old_limit bigint NOT NULL, new_limit bigint NOT NULL, created_at text NOT NULL
+);

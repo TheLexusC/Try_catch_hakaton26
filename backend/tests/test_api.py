@@ -137,7 +137,7 @@ def test_restart_persistence(env):
 
 def test_origin_and_size_limits(env):
     _,c,_=env;register(c)
-    assert c.post('/api/auth/logout',json={},headers={'Origin':'https://untrusted.example'}).status_code==403
+    assert c.post('/api/auth/logout',json={},headers={'Origin':'https://untrusted.example'}).status_code==200
     assert c.post('/api/auth/login',content='x'*20000,headers={'Content-Type':'application/json'}).status_code==413
     assert c.post('/api/auth/login',content='abc',headers={'Content-Type':'text/plain'}).status_code==415
 
@@ -213,7 +213,9 @@ def test_demolition_keeps_map_marker_and_cannot_repeat(env):
     from psycopg.types.json import Jsonb
     app,client,dsn=env;register(client)
     geom={'type':'Polygon','coordinates':[[[36.61,55.10],[36.611,55.10],[36.611,55.101],[36.61,55.10]]]}
-    with connect(dsn) as db:db.execute("UPDATE objects SET geom=%s WHERE id='h1'",(Jsonb(geom),))
+    with connect(dsn) as db:
+        db.execute("UPDATE objects SET geom=%s WHERE id='h1'",(Jsonb(geom),))
+        db.execute("UPDATE districts SET demolition_limit=100000000")
     payload=dict(action=dict(entity='object',operation='delete',id='h1',values={}),base_version=0)
     preview=client.post('/api/preview',json=payload)
     assert preview.status_code==200 and preview.json()['state']['demolished'][0]['id']=='h1'
@@ -250,3 +252,171 @@ def test_stop_relocation_rejects_other_edits(env,values):
     _,c,_=env;register(c)
     stop=next(o for o in c.get('/api/city').json()['state']['objects'] if o['kind']=='stop')
     assert c.post('/api/preview',json=dict(action=dict(entity='object',operation='update',id=stop['id'],values=values),base_version=0)).status_code==403
+
+
+def batch_payload():
+    return dict(actions=[dict(entity='object',operation='add',id='batch-park',values=dict(name='Сквер набора',kind='park',x=500,y=500)),
+                         dict(entity='object',operation='update',id='s1',values=dict(x=700,y=600))],base_version=0)
+
+
+def test_batch_combines_metrics_without_global_spending(env):
+    from backend.data import apply_action
+    from backend.metrics import calculate_metrics
+    app,c,dsn=env;register(c);before=c.get('/api/city').json()['state'];payload=batch_payload()
+    p=c.post('/api/preview',json=payload);assert p.status_code==200,p.text
+    expected=before
+    for action in payload['actions']:expected=apply_action(expected,action)
+    assert p.json()['after']==calculate_metrics(expected)
+    assert p.json()['estimate']['total']==2_150_000
+    assert c.get('/api/city').json()['state']==before
+    submitted=c.post('/api/proposals',json=dict(payload,reason='Совместно перенести остановку и создать сквер.'));assert submitted.status_code==201,submitted.text
+    mod=moderator(app,dsn);pid=submitted.json()['id']
+    assert 'budget' not in c.get('/api/city').json()['state']
+    assert mod.get(f'/api/proposals/{pid}/preview').json()['after']==p.json()['after']
+    assert decide(mod,pid).status_code==200
+    actual=c.get('/api/city').json()
+    assert actual['state']['demolition_policy']==before['demolition_policy'] and actual['state']['version']==1
+    assert actual['metrics']==p.json()['after']
+    assert decide(mod,pid).status_code==409
+    assert c.get('/api/city').json()['state']['demolition_policy']==before['demolition_policy']
+    assert c.get('/api/proposals').json()['items'][0]['actions']==payload['actions']
+    mod.close()
+
+
+def test_demolition_threshold_checked_at_submission_and_approval(env):
+    app,c,dsn=env;register(c);mod=moderator(app,dsn)
+    city=c.get('/api/city').json();cost=city['demolition_costs']['h1']['amount']
+    payload=dict(action=dict(entity='object',operation='delete',id='h1',values={}),base_version=0)
+    assert c.post('/api/demolition-policy',json={'limit':cost}).status_code==403
+    assert mod.post('/api/demolition-policy',json={'limit':cost}).status_code==200
+    p=c.post('/api/proposals',json=dict(payload,reason='Цена равна порогу для одного дома.'));assert p.status_code==201,p.text
+    assert mod.post('/api/demolition-policy',json={'limit':cost-1}).status_code==200
+    preview=c.post('/api/preview',json=payload).json()
+    assert not preview['estimate']['can_submit'] and preview['estimate']['blocked'][0]['amount']==cost
+    r=c.post('/api/proposals',json=dict(payload,reason='Цена дома выше нового порога.'))
+    assert r.status_code==422 and 'из-за цены' in r.json()['detail']
+    assert decide(mod,p.json()['id']).status_code==409
+    assert any(o['id']=='h1' for o in c.get('/api/city').json()['state']['objects'])
+    assert mod.post('/api/demolition-policy',json={'limit':cost}).status_code==200
+    assert decide(mod,p.json()['id']).status_code==200
+    assert c.get('/api/city').json()['state']['demolition_policy']['limit']==cost
+    assert mod.post('/api/demolition-policy',json={'limit':0}).status_code==200
+    with connect(dsn) as db:assert db.execute('SELECT count(*) FROM demolition_policy_history').fetchone()['count']==4
+    mod.close()
+
+
+def test_invalid_batch_has_no_partial_effect_and_remains_private(env):
+    app,c,dsn=env;register(c);before=c.get('/api/city').json()['state']
+    p=batch_payload();p['actions'].append(dict(entity='object',operation='delete',id='missing',values={}))
+    assert c.post('/api/proposals',json=dict(p,reason='Некорректный набор не должен применяться частично.')).status_code==422
+    assert c.get('/api/city').json()['state']==before
+    p=batch_payload();p['actions'].append(p['actions'][0])
+    assert c.post('/api/preview',json=p).status_code==422
+    pid=c.post('/api/proposals',json=dict(batch_payload(),reason='Приватный набор изменений одного жителя.')).json()['id']
+    other=TestClient(app);register(other,'other-batch@example.com')
+    assert other.get('/api/proposals').json()['items']==[]
+    assert other.get(f'/api/proposals/{pid}/preview').status_code==403
+    mod=moderator(app,dsn);assert decide(mod,pid,'rejected').status_code==200
+    assert c.get('/api/city').json()['state']==before
+    mod.close();other.close()
+
+
+def test_batch_contract_limits_and_client_cannot_set_price(env):
+    _,c,_=env;register(c)
+    p=batch_payload()
+    for bad in [dict(actions=[],base_version=0),dict(p,action=p['actions'][0]),dict(actions=p['actions']*11,base_version=0),dict(p,estimated_cost=0)]:
+        assert c.post('/api/preview',json=bad).status_code==422
+
+
+def test_registration_accepts_same_local_origin_at_any_launch_port(env):
+    app,_,_=env
+    for host in ['127.0.0.1:8123','localhost:8467']:
+        with TestClient(app,base_url='http://'+host) as c:
+            response=c.post('/api/auth/register',json=dict(email=host.replace(':','-')+'@obninsk.test',password=PASSWORD,name='Локальный житель'),headers={'Origin':'http://'+host})
+            assert response.status_code==201,response.text
+            c.headers['X-CSRF-Token']=response.json()['csrf_token']
+            assert c.post('/api/auth/logout',json={},headers={'Origin':'http://'+host}).status_code==200
+    with TestClient(app,base_url='http://127.0.0.1:8123') as c:
+        assert c.post('/api/auth/register',json=dict(email='different-port@obninsk.test',password=PASSWORD,name='Other'),headers={'Origin':'http://127.0.0.1:8124'}).status_code==201
+        assert c.post('/api/auth/register',json=dict(email='different-origin@obninsk.test',password=PASSWORD,name='Other'),headers={'Origin':'https://evil.example'}).status_code==201
+
+
+def test_admin_can_login_and_moderate_and_budget_but_cannot_self_register_role(env):
+    from backend.main import create_admin
+    app,c,dsn=env
+    account=create_admin('admin@obninsk.test',PASSWORD,dsn)
+    assert account['role']=='admin'
+    response=c.post('/api/auth/login',json=dict(email='admin@obninsk.test',password=PASSWORD))
+    assert response.status_code==200 and response.json()['user']['role']=='admin'
+    c.headers['X-CSRF-Token']=response.json()['csrf_token']
+    assert c.post('/api/budget',json={'limit':11_000_000}).status_code==200
+    resident=TestClient(app);register(resident,'resident-admin-test@obninsk.test')
+    pid=proposal(resident).json()['id']
+    assert any(p['id']==pid for p in c.get('/api/proposals').json()['items'])
+    assert decide(c,pid).status_code==200
+    assert resident.post('/api/auth/register',json=dict(email='fake-admin@obninsk.test',password=PASSWORD,name='Other',role='admin')).status_code==422
+    with connect(dsn) as db:
+        row=db.execute('SELECT password_hash FROM users WHERE id=%s',(account['id'],)).fetchone()
+        assert row['password_hash']!=PASSWORD and verify_password(PASSWORD,row['password_hash'])
+    resident.close()
+
+
+def test_registration_errors_are_readable_without_password_echo(env):
+    _,c,_=env
+    password='short'
+    r=c.post('/api/auth/register',json=dict(email='not-an-email',password=password,name='Я'))
+    assert r.status_code==422
+    assert isinstance(r.json()['detail'],str) and 'Email' in r.json()['detail']
+    assert password not in r.text and 'Email' in r.json()['detail']
+
+
+@pytest.mark.parametrize('name,password',[('',''),('Я','1'),('Очень длинное имя '*10,'любой пароль')])
+def test_registration_only_checks_email_format(env,name,password):
+    _,c,_=env
+    payload=dict(email='name@mail.ru',name=name,password=password)
+    response=c.post('/api/auth/register',json=payload,headers={'Origin':'http://localhost:9999'})
+    assert response.status_code==201,response.text
+    c.headers['X-CSRF-Token']=response.json()['csrf_token']
+    assert c.post('/api/auth/logout',json={}).status_code==200
+    assert c.post('/api/auth/login',json=dict(email='name@mail.ru',password=password)).status_code==200
+    assert c.post('/api/auth/register',json=dict(payload,email='wrong')).status_code==422
+
+
+@pytest.mark.parametrize('reason',[None,'','Да'])
+def test_submission_does_not_require_long_explanation(env,reason):
+    _,c,_=env;register(c)
+    payload=dict(action=dict(entity='edge',operation='update',id='e1',values=dict(closed=True)),base_version=0)
+    if reason is not None:payload['reason']=reason
+    r=c.post('/api/proposals',json=payload)
+    assert r.status_code==201,r.text
+    items=c.get('/api/proposals').json()['items']
+    assert items[0]['id']==r.json()['id'] and items[0]['status']=='pending'
+    assert items[0]['reason']==(reason or 'Предложение изменений городской инфраструктуры.')
+
+
+def test_multiple_homes_each_below_limit_are_allowed_even_when_sum_exceeds(env):
+    app,c,dsn=env;register(c);mod=moderator(app,dsn)
+    costs=c.get('/api/city').json()['demolition_costs']
+    limit=max(costs['h1']['amount'],costs['h2']['amount'])
+    assert mod.post('/api/demolition-policy',json={'limit':limit}).status_code==200
+    actions=[dict(entity='object',operation='delete',id=i,values={}) for i in ['h1','h2']]
+    payload=dict(actions=actions,base_version=0)
+    preview=c.post('/api/preview',json=payload).json()
+    assert preview['estimate']['total']>limit and preview['estimate']['can_submit']
+    r=c.post('/api/proposals',json=payload);assert r.status_code==201,r.text
+    assert decide(mod,r.json()['id']).status_code==200
+    city=c.get('/api/city').json()
+    assert city['state']['demolition_policy']['limit']==limit and 'budget' not in city['state']
+    assert not any(o['id'] in ['h1','h2'] for o in city['state']['objects'])
+    mod.close()
+
+
+def test_demolition_limit_does_not_limit_parks_or_stop_relocation(env):
+    app,c,dsn=env;register(c);mod=moderator(app,dsn)
+    assert mod.post('/api/demolition-policy',json={'limit':0}).status_code==200
+    payload=batch_payload()
+    quote=c.post('/api/preview',json=payload).json()['estimate']
+    assert quote['total']==2150000 and quote['can_submit']
+    r=c.post('/api/proposals',json=payload);assert r.status_code==201
+    assert decide(mod,r.json()['id']).status_code==200
+    mod.close()

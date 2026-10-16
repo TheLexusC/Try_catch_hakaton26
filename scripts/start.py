@@ -114,7 +114,6 @@ def main():
             if sock.connect_ex(('127.0.0.1',port))!=0:break
         port+=1
     else:raise RuntimeError('Не найден свободный порт. Укажите --port.')
-    os.environ['OBNINSK_ORIGINS']=f'http://127.0.0.1:{port},http://localhost:{port}'
     print(f'Откройте http://127.0.0.1:{port} · Остановка: Ctrl+C',flush=True)
     os.chdir(ROOT)
     os.execv(str(python),[str(python),'-m','uvicorn','backend.main:app','--host','127.0.0.1','--port',str(port)])

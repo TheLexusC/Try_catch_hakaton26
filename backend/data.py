@@ -38,8 +38,8 @@ def migrate_legacy_users(db):
 
 
 def read_state(db,write=False):
-    row=db.execute('SELECT version FROM districts WHERE id=%s FOR '+('UPDATE' if write else 'SHARE'),(DISTRICT,)).fetchone()
-    state={'version':row['version']}
+    row=db.execute('SELECT version,demolition_limit FROM districts WHERE id=%s FOR '+('UPDATE' if write else 'SHARE'),(DISTRICT,)).fetchone()
+    state={'version':row['version'],'demolition_policy':{'limit':row['demolition_limit']}}
     for table in ('nodes','edges','objects'):
         state[table]=[dict(r) for r in db.execute(f'SELECT * FROM {table} WHERE district_id=%s ORDER BY id',(DISTRICT,)).fetchall()]
         for item in state[table]:item.pop('district_id')
