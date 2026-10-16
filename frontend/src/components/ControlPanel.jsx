@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-// Конфигурация инструментов вынесена для удобства чтения
+// Добавлен 5-й элемент в массив конфигурации: цифра для горячей клавиши
 const tools = [
-  ['inspect', '↗', 'Исследовать', 'Маршруты от выбранного дома'],
-  ['edge', '⊘', 'Изменить дорожку', 'Перекрыть или открыть участок'],
-  ['move_stop', '▣', 'Перенести остановку', 'Выбрать новое место'],
-  ['add_park', '♧', 'Добавить зелёную зону', 'Предложить место для отдыха'],
-  ['remove_park', '−', 'Убрать зелёную зону', 'Отправить на рассмотрение'],
+  ['inspect', '↗', 'Исследовать', 'Маршруты от выбранного дома', '1'],
+  ['edge', '⊘', 'Изменить дорожку', 'Перекрыть или открыть участок', '2'],
+  ['move_stop', '▣', 'Перенести остановку', 'Выбрать новое место', '3'],
+  ['add_park', '♧', 'Добавить зелёную зону', 'Предложить место', '4'],
+  ['remove_park', '−', 'Убрать зелёную зону', 'Отправить на рассмотрение', '5'],
 ];
 
 export default function ControlPanel({
@@ -23,7 +23,23 @@ export default function ControlPanel({
   const [target, setTarget] = useState('');
   const nodes = city.map.nodes;
 
-  // Распакованный выбор опций вместо сложного тернарного оператора
+  // НОВОЕ: Обработчик горячих клавиш (1-5) для переключения инструментов
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Игнорируем нажатия, если пользователь вводит текст в инпут или селект
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      
+      const keyIndex = parseInt(e.key, 10) - 1;
+      if (keyIndex >= 0 && keyIndex < tools.length) {
+        setTarget('');
+        setMode(tools[keyIndex][0]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setMode]);
+
   let options = [];
   if (mode === 'edge') {
     options = city.map.edges.map(e => {
@@ -43,15 +59,12 @@ export default function ControlPanel({
     setMode(next);
   };
 
-  // Распакованная логика формирования payload для экшена
   const propose = () => {
     if (!target) return;
-
     let actionPayload;
     if (mode === 'edge') {
-      const isClosed = city.state.closed_edges.includes(target);
       actionPayload = { 
-        type: isClosed ? 'open_edge' : 'close_edge', 
+        type: city.state.closed_edges.includes(target) ? 'open_edge' : 'close_edge', 
         target_id: target 
       };
     } else if (mode === 'move_stop') {
@@ -59,11 +72,9 @@ export default function ControlPanel({
     } else {
       actionPayload = { type: mode, target_id: target };
     }
-
     onAction(actionPayload);
   };
 
-  // Вспомогательная функция для читаемости плейсхолдера
   const getSelectPlaceholder = () => {
     if (mode === 'edge') return 'участок';
     if (mode === 'remove_park') return 'зелёную зону';
@@ -75,27 +86,28 @@ export default function ControlPanel({
       <div className="section-kicker">01 / ИНСТРУМЕНТЫ</div>
       <h2>Что изменим?</h2>
       
-      {/* Список инструментов */}
       <div className="tools">
-        {tools.map(([id, icon, title, subtitle]) => (
+        {tools.map(([id, icon, title, subtitle, hotkey]) => (
           <button 
             key={id} 
             disabled={busy} 
             aria-pressed={mode === id} 
             className={`tool ${mode === id ? 'active' : ''}`} 
             onClick={() => selectTool(id)}
+            title={`Горячая клавиша: ${hotkey}`} // Подсказка при наведении
           >
             <span className="tool-icon" aria-hidden="true">{icon}</span>
-            <span>
+            <span className="tool-content">
               <strong>{title}</strong>
               <small>{subtitle}</small>
             </span>
+            {/* НОВОЕ: Визуальное отображение кнопки клавиатуры */}
+            <kbd className="hotkey-hint">{hotkey}</kbd>
             {mode === id && <i />}
           </button>
         ))}
       </div>
 
-      {/* Выбор остановки (только для режима move_stop) */}
       {mode === 'move_stop' && (
         <label className="field">
           Остановка
@@ -111,7 +123,6 @@ export default function ControlPanel({
         </label>
       )}
 
-      {/* Выбор цели для изменения */}
       {mode !== 'inspect' && (
         <div className="target-select">
           <label className="field">
@@ -129,12 +140,11 @@ export default function ControlPanel({
             disabled={!target || busy} 
             onClick={propose}
           >
-            Предложить изменение →
+            {busy ? 'Отправка...' : 'Предложить изменение →'}
           </button>
         </div>
       )}
 
-      {/* Информационные блоки */}
       <div className="moderation-note">
         <span aria-hidden="true">◇</span>
         <div>
@@ -156,5 +166,3 @@ export default function ControlPanel({
     </aside>
   );
 }
-
-
