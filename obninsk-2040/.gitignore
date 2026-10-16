@@ -1,0 +1,21 @@
+# Private data and credentials
+.env
+.env.*
+!.env.example
+backend/instance/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+# Dependencies and local build
+.venv/
+node_modules/
+frontend/dist/
+# Python / tests / OS
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+*.log
