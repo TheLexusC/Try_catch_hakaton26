@@ -64,6 +64,28 @@ function Dialog({ title, onClose, children, wide = false, locked = false }) {
   );
 }
 
+function Toast({ message, type, onClose }) {
+  const [fading, setFading] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const fadeTimer = window.setTimeout(() => setFading(true), 4500);
+    const closeTimer = window.setTimeout(() => onCloseRef.current(), 5000);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(closeTimer);
+    };
+  }, [message]);
+
+  return (
+    <div className={`banner ${type} toast${fading ? ' is-fading' : ''}`} role={type === 'error' ? 'alert' : 'status'}>
+      {message}
+      <button onClick={onClose} aria-label="Скрыть уведомление">×</button>
+    </div>
+  );
+}
+
 export default function App() {
   // Global / Session State
   const [city, setCity] = useState(null);
@@ -399,21 +421,14 @@ export default function App() {
         </div>
       </header>
 
-      <main>
-        {error && (
-          <div className="banner error" role="alert">
-            {error}
-            <button onClick={() => setError('')} aria-label="Скрыть ошибку">×</button>
-          </div>
-        )}
-        
-        {notice && (
-          <div className="banner success" role="status">
-            {notice}
-            <button onClick={() => setNotice('')} aria-label="Скрыть уведомление">×</button>
-          </div>
-        )}
+      {(error || notice) && (
+        <div className="toast-container" aria-live="polite">
+          {error && <Toast key={`error-${error}`} message={error} type="error" onClose={() => setError('')} />}
+          {notice && <Toast key={`notice-${notice}`} message={notice} type="success" onClose={() => setNotice('')} />}
+        </div>
+      )}
 
+      <main>
         {tab === 'map' ? (
           <>
             <section className="hero">
@@ -512,7 +527,7 @@ export default function App() {
                     <article>
                       <span>01</span>
                       <h3>Карта из OpenStreetMap</h3>
-                      <p>Дома и геометрия дорожек взяты из открытых данных. Модель ограничена участком улицы Курчатова. <a href={city.map.source.map_url} target="_blank" rel="noreferrer">Открыть исходную карту ↗</a></p>
+                      <p>Дома и геометрия дорожек взяты из открытых данных. Модель ограничена участком улицы Курчатова. </p>
                     </article>
                     <article>
                       <span>02</span>

@@ -2,17 +2,27 @@
    Обнинск 2040 — базовые стили
    ========================================================================== */
 
+@font-face {
+  font-family: 'Donpoligrafbum';
+  src: url('./assets/fonts/Donpoligrafbum-Bold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
-  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #193d35;
-  background: #f7f8f3;
+  --font-family: 'Montserrat', sans-serif;
+  font-family: var(--font-family);
+  font-weight: 600;
+  color: #0B2239;
+  background: #F3F6F8;
   font-synthesis: none;
 
-  --ink: #193d35;
-  --muted: #7b8c82;
-  --green: #28715a;
-  --line: #dce4da;
-  --paper: #f7f8f3;
+  --ink: #0B2239;
+  --muted: #4F80B0;
+  --green: #42B3FF;
+  --line: #DAE0E4;
+  --paper: #F3F6F8;
 }
 
 * {
@@ -55,7 +65,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid #d6aa5e;
+  outline: 3px solid #42B3FF;
   outline-offset: 3px;
 }
 
@@ -65,6 +75,27 @@ a {
 
 h1, h2, h3, p {
   margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Donpoligrafbum', sans-serif;
+}
+
+small {
+  font-size: .9em;
+  color: #000;
+}
+
+span {
+  color: var(--green);
+}
+
+p {
+  font-family: var(--font-family);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.3px;
+  color: #000 !important;
 }
 
 /* ==========================================================================
@@ -82,12 +113,12 @@ button.primary {
 }
 
 button.primary:hover:not(:disabled) {
-  background: #205e4a;
-  box-shadow: 0 3px 10px #194d3320;
+  background: #269DE5;
+  box-shadow: 0 3px 10px #19384D20;
 }
 
 .secondary {
-  border: 1px solid #ccd8cf;
+  border: 1px solid #CCD3D8;
   border-radius: 8px;
   padding: 12px 18px;
   background: white;
@@ -95,7 +126,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .secondary:hover:not(:disabled) {
-  background: #edf3eb;
+  background: #EBF0F3;
 }
 
 .text-button {
@@ -118,9 +149,9 @@ button.primary:hover:not(:disabled) {
    ========================================================================== */
 
 .site-header {
-  height: 88px;
+  min-height: 100px;
   padding: 0 4%;
-  background: #fdfefa;
+  background: #FAFCFE;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -133,7 +164,7 @@ button.primary:hover:not(:disabled) {
   align-items: center;
   gap: 12px;
   text-decoration: none;
-  font-size: 15px;
+  font-size: 18px;
   letter-spacing: 1px;
   font-weight: 700;
   white-space: nowrap;
@@ -141,11 +172,11 @@ button.primary:hover:not(:disabled) {
 
 .brand b {
   font-weight: 400;
-  color: #678371;
+  color: #436C95;
 }
 
 .brand small {
-  font-size: 7px;
+  font-size: 11px;
   letter-spacing: 1.4px;
   display: block;
   margin-top: 5px;
@@ -153,13 +184,13 @@ button.primary:hover:not(:disabled) {
 }
 
 .brand-mark {
-  background: #214d3f;
+  background: #213B4D;
   border-radius: 9px;
   color: #fff;
-  font-size: 29px;
-  width: 42px;
-  height: 42px;
-  line-height: 38px;
+  font-size: 34px;
+  width: 48px;
+  height: 48px;
+  line-height: 44px;
   text-align: center;
   position: relative;
   font-weight: 400;
@@ -169,23 +200,23 @@ button.primary:hover:not(:disabled) {
   position: absolute;
   right: 5px;
   top: -4px;
-  font-size: 16px;
-  color: #c9d9a7;
+  font-size: 18px;
+  color: var(--green);
 }
 
 .site-header nav {
   display: flex;
   align-self: stretch;
-  gap: 25px;
+  gap: 30px;
 }
 
 .site-header nav button {
   background: none;
   border-bottom: 2px solid transparent;
-  font-size: 12px;
+  font-size: 15px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: var(--muted);
   padding: 0 4px;
 }
@@ -198,39 +229,39 @@ button.primary:hover:not(:disabled) {
 
 .count {
   border-radius: 20px;
-  background: #e4eddd;
-  font-size: 10px;
-  min-width: 19px;
-  padding: 2px 5px;
+  background: #DDE7ED;
+  font-size: 12px;
+  min-width: 22px;
+  padding: 3px 6px;
 }
 
 .account {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #dfeadc;
-  font-size: 12px;
+  background: #DCE4EA;
+  font-size: 15px;
 }
 
 .account-name {
-  font-size: 12px;
-  max-width: 150px;
+  font-size: 15px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .account-name small {
   display: block;
-  color: var(--muted);
-  font-size: 9px;
+  color: #000;
+  font-size: 13px;
   margin-top: 3px;
 }
 
@@ -252,48 +283,52 @@ main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 52px 0 38px;
-  gap: 25px;
+  padding: 58px 0 42px;
+  gap: 30px;
 }
 
 .eyebrow,
 .section-kicker {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 1.7px;
   font-weight: 700;
-  color: #5c806b;
+  color: #3F658B;
+}
+
+.section-kicker {
+  color: var(--green);
 }
 
 .eyebrow {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 11px;
 }
 
 .live-dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #76a064;
+  background: #6488A0;
 }
 
 .hero h1 {
-  font-size: clamp(33px, 4vw, 57px);
+  font-size: clamp(32px, 3.5vw, 50px);
   font-weight: 500;
   line-height: 1.09;
   letter-spacing: -2px;
-  margin: 20px 0 18px;
+  margin: 23px 0 20px;
 }
 
 .hero h1 span {
-  color: #78917c;
+  color: var(--green);
 }
 
 .hero p {
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.7;
-  color: #7b8a80;
+  color: #4B7AA8;
 }
 
 .hero-aside {
@@ -302,29 +337,29 @@ main {
 }
 
 .coordinate {
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-  color: #93a092;
+  font-family: var(--font-family);
+  font-size: 13px;
+  color: #6690BA;
   line-height: 1.7;
-  margin-bottom: 25px;
+  margin-bottom: 28px;
 }
 
 .hero-stats {
   display: flex;
-  gap: 35px;
+  gap: 40px;
 }
 
 .hero-stats strong {
   display: block;
-  font-size: 34px;
+  font-size: 40px;
   letter-spacing: -1px;
   font-weight: 500;
 }
 
 .hero-stats span {
   display: block;
-  font-size: 10px;
-  color: #7c8e80;
+  font-size: 12px;
+  color: var(--green);
   margin-top: 5px;
 }
 
@@ -334,12 +369,12 @@ main {
 
 .workspace {
   display: grid;
-  grid-template-columns: 282px 1fr;
+  grid-template-columns: 330px minmax(0, 1fr);
   border: 1px solid var(--line);
   background: white;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 6px 30px #2c4a2d04;
+  box-shadow: 0 6px 30px #2C3E4A04;
 }
 
 .control-panel {
@@ -347,11 +382,15 @@ main {
   border-right: 1px solid var(--line);
 }
 
+.control-panel > .section-kicker {
+  font-size: 11px;
+}
+
 .control-panel h2 {
-  font-size: 23px;
+  font-size: 27px;
   font-weight: 500;
   letter-spacing: -.7px;
-  margin: 11px 0 23px;
+  margin: 13px 0 25px;
 }
 
 .tool {
@@ -359,7 +398,7 @@ main {
   gap: 12px;
   align-items: center;
   width: 100%;
-  padding: 13px 10px;
+  padding: 15px 11px;
   border-radius: 7px;
   background: white;
   border: 1px solid transparent;
@@ -369,27 +408,27 @@ main {
 
 .tool strong {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 
 .tool small {
   display: block;
-  color: #8a988c;
-  font-size: 9px;
-  margin-top: 5px;
+  color: #000;
+  font-size: 12px;
+  margin-top: 6px;
 }
 
 .tool-icon {
-  font-size: 22px;
-  width: 24px;
+  font-size: 25px;
+  width: 28px;
   text-align: center;
-  color: #78917d;
+  color: #4D7CAB;
 }
 
 .tool.active {
-  background: #edf3e8;
-  border-color: #d5e1cf;
+  background: #E8EFF3;
+  border-color: #CFD8E1;
 }
 
 .tool.active .tool-icon {
@@ -400,18 +439,18 @@ main {
   width: 5px;
   height: 5px;
   border-radius: 100%;
-  background: #4a795c;
+  background: #4A6679;
   margin-left: auto;
   flex-shrink: 0;
 }
 
 .tool:hover {
-  background: #f5f8f1;
+  background: #F1F5F8;
 }
 
 .moderation-note {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   margin: 28px 0 20px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
@@ -419,24 +458,24 @@ main {
 
 .moderation-note > span {
   font-size: 22px;
-  color: #87a177;
+  color: var(--green);
 }
 
 .moderation-note b {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .moderation-note p {
-  font-size: 10px;
+  font-size: 13px;
   line-height: 1.65;
-  color: #879180;
+  color: #4F80B0;
   margin-top: 6px;
 }
 
 .dataset-note {
-  font-size: 10px;
-  color: #71846f;
+  font-size: 12px;
+  color: #46719B;
   margin-top: 25px;
   line-height: 1.8;
 }
@@ -449,8 +488,8 @@ main {
 
 .dataset-note small {
   padding-left: 12px;
-  font-size: 9px;
-  color: #9aa494;
+  font-size: 12px;
+  color: #000;
 }
 
 /* ==========================================================================
@@ -471,8 +510,8 @@ main {
   display: block;
   width: 100%;
   margin-top: 7px;
-  background: #fcfdf9;
-  border: 1px solid #d6dfd2;
+  background: #F9FBFD;
+  border: 1px solid #D2DADF;
   border-radius: 7px;
   padding: 12px;
   font-size: 13px;
@@ -486,7 +525,7 @@ main {
 
 .field input::placeholder,
 .field textarea::placeholder {
-  color: #a0a99b;
+  color: #7299C0;
   font-size: 12px;
 }
 
@@ -513,7 +552,7 @@ main {
 
 .map-panel {
   min-width: 0;
-  background: #edf1e9;
+  background: #E9EEF1;
   display: flex;
   flex-direction: column;
 }
@@ -523,8 +562,8 @@ main {
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  background: #fafcf7;
-  border-bottom: 1px solid #e1e8dd;
+  background: #F7FAFC;
+  border-bottom: 1px solid #DDE4E8;
 }
 
 .map-status {
@@ -532,8 +571,8 @@ main {
   font-size: 7px;
   letter-spacing: 1.1px;
   margin-right: 10px;
-  color: #6e8868;
-  background: #edf3e7;
+  color: #456F99;
+  background: #E7EEF3;
   padding: 4px 6px;
   border-radius: 3px;
   vertical-align: middle;
@@ -552,16 +591,16 @@ main {
 
 .map-top small {
   display: block;
-  font-size: 10px;
-  color: #8b9885;
+  font-size: 12px;
+  color: #000;
   margin-top: 6px;
 }
 
 .version {
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-  color: #7e9277;
-  border: 1px solid #dbe5d3;
+  font-family: var(--font-family);
+  font-size: 12px;
+  color: #4D7CAB;
+  border: 1px solid #D3DEE5;
   border-radius: 5px;
   padding: 5px 7px;
 }
@@ -589,19 +628,19 @@ main {
 /* --- элементы SVG-карты --- */
 
 .building {
-  fill: #d7ded4;
-  stroke: #c2cec2;
+  fill: #D2D9E0;
+  stroke: #C2C9CE;
   stroke-width: .7;
 }
 
 .building.residential {
-  fill: #c5d4be;
-  stroke: #8fac83;
+  fill: #BEC9D4;
+  stroke: #839CAC;
 }
 
 .street-label {
   font-size: 10px;
-  fill: #9caa98;
+  fill: #7198BF;
   letter-spacing: 3px;
 }
 
@@ -610,7 +649,7 @@ main {
 }
 
 .route.park {
-  stroke: #397d64;
+  stroke: #39627D;
   stroke-dasharray: 6 4;
   opacity: .9;
 }
@@ -645,18 +684,18 @@ main {
 
 .home-marker circle {
   fill: white;
-  stroke: #65845e;
+  stroke: #5E7584;
   stroke-width: 1.5;
 }
 
 .home-marker.selected circle {
-  fill: #285a45;
+  fill: #28465A;
   stroke: #fff;
   stroke-width: 3;
 }
 
 .home-marker text {
-  fill: #396443;
+  fill: #264665;
   pointer-events: none;
 }
 
@@ -666,11 +705,11 @@ main {
 
 .home-label {
   font-size: 9px;
-  fill: #52694d !important;
+  fill: #335271 !important;
 }
 
 .home-label-bg {
-  fill: #f9fcf3;
+  fill: #F3F8FC;
   fill-opacity: .9;
 }
 
@@ -693,7 +732,7 @@ main {
 }
 
 .facility.park rect {
-  fill: #669268;
+  fill: #667C92;
 }
 
 .facility text {
@@ -717,7 +756,7 @@ main {
 
 .north {
   font-size: 10px;
-  fill: #587464;
+  fill: #3A5D80;
 }
 
 /* --- управление и подписи карты --- */
@@ -728,10 +767,10 @@ main {
   bottom: 20px;
   display: flex;
   flex-direction: column;
-  border: 1px solid #d3ddd0;
+  border: 1px solid #D0D8DD;
   border-radius: 7px;
   overflow: hidden;
-  box-shadow: 0 3px 10px #25452d09;
+  box-shadow: 0 3px 10px #25384509;
 }
 
 .zoom-controls button {
@@ -739,7 +778,7 @@ main {
   height: 32px;
   background: #fffffff2;
   font-size: 18px;
-  border-bottom: 1px solid #e3e8de;
+  border-bottom: 1px solid #DEE4E8;
 }
 
 .zoom-controls button:last-child {
@@ -748,7 +787,7 @@ main {
 }
 
 .zoom-controls button:hover {
-  background: #e7eee1;
+  background: #E1E9EE;
 }
 
 .map-caption {
@@ -759,7 +798,7 @@ main {
   border-radius: 5px;
   font-size: 8px;
   padding: 7px 10px;
-  color: #74846d;
+  color: #45709A;
   pointer-events: none;
 }
 
@@ -770,25 +809,25 @@ main {
 }
 
 .map-bottom {
-  padding: 13px 18px;
+  padding: 15px 18px;
   display: flex;
   align-items: center;
   gap: 15px;
   justify-content: space-between;
-  border-top: 1px solid #dde6d6;
-  background: #f5f8f1;
+  border-top: 1px solid #D6E0E6;
+  background: #F1F5F8;
 }
 
 .legend {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 15px;
   flex-wrap: wrap;
 }
 
 .legend span {
-  font-size: 8px;
-  color: #7e8d75;
+  font-size: 10px;
+  color: #000;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -799,7 +838,7 @@ main {
   height: 7px;
   border-radius: 2px;
   background: #fff;
-  border: 1px solid #78916c;
+  border: 1px solid #6C8291;
 }
 
 .legend i.legend-stop {
@@ -808,19 +847,19 @@ main {
 }
 
 .legend i.legend-park {
-  background: #669268;
-  border-color: #669268;
+  background: #668092;
+  border-color: #47739F;
   border-radius: 50%;
 }
 
 .legend .route-label {
-  color: #78906b;
-  font-size: 8px;
+  color: #000;
+  font-size: 10px;
 }
 
 .map-bottom a {
-  font-size: 8px;
-  color: #718568;
+  font-size: 10px;
+  color: #446E97;
   white-space: nowrap;
 }
 
@@ -835,19 +874,23 @@ main {
   justify-content: space-between;
   margin: 12px 2px 0;
   padding: 12px 0;
-  font-size: 10px;
-  color: #87917e;
+  font-size: 12px;
+  color: #000;
 }
 
 .selection-strip b {
   font-weight: 500;
-  color: #4e6850;
+  color: #000;
+}
+
+.selection-strip > span {
+  color: #000;
 }
 
 .selection-strip button {
   background: none;
-  font-size: 10px;
-  color: #527556;
+  font-size: 12px;
+  color: #385B7D;
   padding: 4px;
 }
 
@@ -859,6 +902,10 @@ main {
   margin-top: 36px;
 }
 
+.analytics .section-kicker {
+  font-size: 11px;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -868,57 +915,59 @@ main {
 }
 
 .section-heading h2 {
-  font-size: 27px;
+  font-size: 32px;
   font-weight: 500;
   letter-spacing: -.9px;
   margin-top: 9px;
 }
 
 .pill {
-  font-size: 9px;
-  background: #ecf1e6;
-  color: #7c906e;
-  border: 1px solid #dce5d4;
-  padding: 6px 10px;
+  font-size: 11px;
+  background: #E6EDF1;
+  color: #4976A3;
+  border: 1px solid #D4DEE5;
+  padding: 7px 12px;
   border-radius: 20px;
 }
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 15px;
 }
 
 .metric {
+  min-width: 0;
   border: 1px solid var(--line);
   background: #fff;
-  padding: 22px;
+  padding: 25px;
   border-radius: 10px;
 }
 
 .metric-label {
-  font-size: 11px;
-  color: #7a8b78;
+  font-size: 15px;
+  color: #4B79A6;
 }
 
 .metric-value {
-  font-size: 36px;
+  font-size: 40px;
   font-weight: 500;
   letter-spacing: -1.2px;
-  margin: 14px 0;
+  margin: 16px 0;
 }
 
 .metric-value small {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 400;
   letter-spacing: 0;
-  color: #8e9b88;
+  color: #000;
 }
 
 .metric-bottom {
-  font-size: 9px;
-  color: #9aa492;
+  font-size: 11px;
+  color: #6992BB;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 9px;
   line-height: 1.4;
@@ -928,14 +977,14 @@ main {
   white-space: nowrap;
 }
 
-.positive { color: #3b855e; }
+.positive { color: #20578E; }
 .negative { color: #b56b50; }
-.neutral  { color: #8e9b88; }
+.neutral  { color: #5C89B6; }
 
 .old-value {
   font-size: 21px;
   font-weight: 400;
-  color: #a6af9d;
+  color: var(--green);
 }
 
 /* ==========================================================================
@@ -955,19 +1004,19 @@ table {
   width: 100%;
   text-align: left;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 th {
   font-weight: 400;
-  color: #8b9782;
-  background: #fbfcf8;
-  font-size: 10px;
+  color: #5584B2;
+  background: #F8FAFC;
+  font-size: 12px;
 }
 
 td, th {
-  padding: 16px 22px;
-  border-bottom: 1px solid #ecf0e6;
+  padding: 18px 24px;
+  border-bottom: 1px solid #E6ECF0;
 }
 
 tr:last-child td {
@@ -975,27 +1024,27 @@ tr:last-child td {
 }
 
 .selected-row {
-  background: #f7faf2;
+  background: #F2F7FA;
 }
 
 .table-link {
   background: transparent;
-  color: #476746;
-  font-size: 11px;
+  color: #304E6B;
+  font-size: 13px;
   padding: 0;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .access-tag {
-  font-size: 9px;
+  font-size: 11px;
   border-radius: 4px;
   padding: 4px 7px;
 }
 
 .access-tag.yes {
-  color: #668b51;
-  background: #edf4e4;
+  color: #396591;
+  background: #E4EEF4;
 }
 
 .access-tag.no {
@@ -1008,53 +1057,57 @@ tr:last-child td {
    ========================================================================== */
 
 .method {
-  margin-top: 48px;
-  padding-top: 28px;
+  margin-top: 56px;
+  padding-top: 34px;
   border-top: 1px solid var(--line);
 }
 
+.method > .section-kicker {
+  font-size: 11px;
+}
+
 .method h2 {
-  font-size: 27px;
+  font-size: 32px;
   letter-spacing: -.9px;
   font-weight: 500;
-  margin: 10px 0 25px;
+  margin: 12px 0 30px;
 }
 
 .method-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 35px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px;
 }
 
 .method-grid article > span {
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-  color: #a9b69b;
+  font-family: var(--font-family);
+  font-size: 13px;
+  color: var(--green);
 }
 
 .method h3 {
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 500;
-  margin: 12px 0 9px;
+  margin: 14px 0 11px;
 }
 
 .method p {
-  font-size: 11px;
-  color: #88927e;
-  line-height: 1.8;
+  font-size: 15px;
+  color: #4F7FAF;
+  line-height: 1.75;
 }
 
 .method a {
-  color: #657f55;
+  color: #3C6186;
   text-underline-offset: 2px;
 }
 
 .method details {
-  font-size: 10px;
+  font-size: 13px;
   border-top: 1px solid var(--line);
   margin-top: 24px;
   padding-top: 17px;
-  color: #829074;
+  color: #4B79A7;
 }
 
 .method summary {
@@ -1064,7 +1117,7 @@ tr:last-child td {
 
 .method details p {
   margin: 12px 0;
-  font-size: 10px;
+  font-size: 14px;
 }
 
 /* ==========================================================================
@@ -1072,21 +1125,23 @@ tr:last-child td {
    ========================================================================== */
 
 footer {
+  width: 100%;
+  max-width: 1500px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  margin-top: 35px;
-  padding: 25px 0;
+  margin: 35px auto 0;
+  padding: 25px 4%;
   border-top: 1px solid var(--line);
-  font-size: 9px;
-  color: #9aa68b;
+  font-size: 13px;
+  color: #6590BA;
 }
 
 footer > span:first-child {
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 1px;
-  color: #607b50;
+  color: #395D80;
 }
 
 footer b {
@@ -1109,6 +1164,33 @@ footer b {
   line-height: 1.5;
 }
 
+.toast-container {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(440px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.banner.toast {
+  width: 100%;
+  margin: 0;
+  box-shadow: 0 8px 28px #0B223933;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity .5s ease, transform .5s ease;
+}
+
+.banner.toast.is-fading {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 .banner button {
   background: none;
   flex-shrink: 0;
@@ -1122,9 +1204,9 @@ footer b {
 }
 
 .banner.success {
-  background: #eaf3e4;
-  color: #4c7840;
-  border: 1px solid #d1e3c8;
+  background: #E4EDF3;
+  color: #29537D;
+  border: 1px solid #C8D8E3;
 }
 
 /* ==========================================================================
@@ -1138,15 +1220,19 @@ footer b {
 
 .requests-section h1 {
   font-weight: 500;
-  font-size: 42px;
+  font-size: 34px;
   letter-spacing: -1.5px;
   margin: 12px 0;
 }
 
 .requests-section .section-heading p {
-  font-size: 13px;
-  color: #8b9781;
+  font-size: 15px;
+  color: #5483B2;
   line-height: 1.7;
+}
+
+.requests-section .section-kicker {
+  font-size: 11px;
 }
 
 .request-filters {
@@ -1156,23 +1242,23 @@ footer b {
 }
 
 .request-filters button {
-  padding: 10px 15px;
+  padding: 12px 17px;
   border-radius: 7px;
   background: transparent;
-  color: #8a987e;
-  font-size: 11px;
+  color: #5382B2;
+  font-size: 13px;
   border: 1px solid transparent;
 }
 
 .request-filters button.active {
-  background: #edf3e7;
-  border-color: #d3dfca;
-  color: #577447;
+  background: #E7EEF3;
+  border-color: #CAD4DF;
+  color: #335576;
 }
 
 .request-filters span {
   margin-left: 7px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .request-list {
@@ -1185,7 +1271,7 @@ footer b {
   border: 1px solid var(--line);
   border-radius: 11px;
   background: white;
-  padding: 23px;
+  padding: 26px;
   min-width: 0;
 }
 
@@ -1197,38 +1283,38 @@ footer b {
 }
 
 .status {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
-  padding: 5px 9px;
+  padding: 6px 10px;
   border-radius: 5px;
   display: inline-block;
   white-space: nowrap;
 }
 
 .status.pending  { background: #fbf1d9; color: #a48a4b; }
-.status.approved { background: #eaf3e4; color: #658852; }
+.status.approved { background: #E4EDF3; color: #3B648D; }
 .status.rejected { background: #f5e9e1; color: #a07961; }
 
 .request-card time {
-  font-size: 9px;
-  color: #a4ad99;
+  font-size: 11px;
+  color: #749AC0;
 }
 
 .request-card h3 {
   font-weight: 500;
-  font-size: 19px;
+  font-size: 23px;
   letter-spacing: -.4px;
-  margin: 20px 0 6px;
+  margin: 22px 0 8px;
 }
 
 .target-label {
-  font-size: 10px;
-  color: #a0aa94;
+  font-size: 14px;
+  color: #6E96BE;
 }
 
 .request-reason {
-  font-size: 12px;
-  color: #728166;
+  font-size: 14px;
+  color: #426B93;
   line-height: 1.7;
   margin: 18px 0;
   white-space: pre-wrap;
@@ -1236,7 +1322,7 @@ footer b {
 }
 
 .request-card-bottom {
-  border-top: 1px solid #e9eee2;
+  border-top: 1px solid #E2E9EE;
   padding-top: 15px;
   display: flex;
   justify-content: space-between;
@@ -1245,17 +1331,17 @@ footer b {
 }
 
 .request-card-bottom > span {
-  font-size: 9px;
-  color: #a5ae9b;
+  font-size: 11px;
+  color: var(--green);
 }
 
 .decision-note {
-  background: #f8faf4;
+  background: #F4F8FA;
   padding: 13px;
   border-radius: 6px;
   margin: 15px 0;
   font-size: 11px;
-  color: #7e8e70;
+  color: #4976A3;
 }
 
 .decision-note b {
@@ -1264,6 +1350,7 @@ footer b {
 }
 
 .decision-note p {
+  font-size: 13px;
   line-height: 1.6;
   margin: 7px 0;
   white-space: pre-wrap;
@@ -1271,8 +1358,8 @@ footer b {
 }
 
 .decision-note small {
-  font-size: 8px;
-  color: #9dab91;
+  font-size: 10px;
+  color: #000;
 }
 
 /* ==========================================================================
@@ -1283,7 +1370,7 @@ footer b {
   text-align: center;
   padding: 65px 25px;
   background: #fff;
-  border: 1px dashed #d6dfcc;
+  border: 1px dashed #CCD7DF;
   border-radius: 12px;
   margin: 25px 0;
 }
@@ -1298,22 +1385,22 @@ footer b {
 .empty-state p {
   max-width: 470px;
   margin: 0 auto 25px;
-  color: #91a080;
-  font-size: 13px;
+  color: #5A87B5;
+  font-size: 15px;
   line-height: 1.7;
 }
 
 .empty-icon {
   font-size: 38px;
-  color: #9db28d;
+  color: #6F97BE;
 }
 
 .muted {
-  color: #8a987c;
+  color: #5181B1;
 }
 
 .small-text {
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.8;
   margin: 25px 0;
 }
@@ -1323,27 +1410,32 @@ footer b {
    ========================================================================== */
 
 .dialog {
-  border: 1px solid #d8e0d0;
+  border: 1px solid #D0DAE0;
   border-radius: 16px;
   padding: 0;
-  width: min(460px, calc(100vw - 32px));
-  max-height: 90vh;
+  width: min(560px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--ink);
   background: #fff;
-  box-shadow: 0 20px 80px #102e2940;
+  box-shadow: 0 20px 80px #10222E40;
 }
 
 .dialog.wide {
-  width: min(850px, calc(100vw - 32px));
+  width: min(1080px, calc(100vw - 24px));
 }
 
 .dialog::backdrop {
-  background: #1c332b70;
+  background: #1C2A3370;
   backdrop-filter: blur(4px);
 }
 
 .dialog-inner {
-  padding: 30px;
+  width: 100%;
+  min-width: 0;
+  padding: 36px;
 }
 
 .dialog-top {
@@ -1354,32 +1446,51 @@ footer b {
 }
 
 .dialog h2 {
-  font-size: 24px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 28px;
   font-weight: 500;
   letter-spacing: -.7px;
 }
 
 .icon-button {
-  background: #f3f6ed;
+  background: #EDF2F6;
   width: 28px;
   height: 28px;
   border-radius: 50%;
   font-size: 20px;
   flex-shrink: 0;
-  color: #81926e;
+  color: #42B3FF;
 }
 
 .dialog-description {
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.7;
-  color: #8b997c;
+  color: #5282B1;
   margin: 13px 0 20px;
 }
 
+.dialog .field {
+  margin: 20px 0;
+  font-size: 14px;
+}
+
+.dialog .field input,
+.dialog .field select,
+.dialog .field textarea {
+  padding: 14px;
+  font-size: 15px;
+}
+
+.dialog .field input::placeholder,
+.dialog .field textarea::placeholder {
+  font-size: 14px;
+}
+
 .form-note {
-  font-size: 10px;
+  font-size: 14px;
   line-height: 1.7;
-  color: #94a085;
+  color: #5D8AB6;
   margin: 13px 0 20px;
 }
 
@@ -1389,14 +1500,14 @@ footer b {
   border: 1px solid #eddbcd;
   border-radius: 6px;
   color: #ab6b4d;
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1.6;
   margin: 14px 0;
 }
 
 .auth-switch {
-  font-size: 11px;
-  color: #94a083;
+  font-size: 15px;
+  color: #5C89B6;
   text-align: center;
   margin-top: 22px;
 }
@@ -1404,7 +1515,7 @@ footer b {
 .auth-switch button {
   font-size: 11px;
   background: none;
-  color: #5e8349;
+  color: #315D89;
   text-decoration: underline;
 }
 
@@ -1413,29 +1524,33 @@ footer b {
 }
 
 .proposal-heading h3 {
-  font-size: 21px;
+  font-size: 25px;
   font-weight: 500;
   letter-spacing: -.5px;
   margin: 13px 0 6px;
 }
 
 .proposal-heading p {
-  font-size: 10px;
-  color: #94a080;
+  font-size: 12px;
+  color: #5A87B5;
 }
 
 /* --- компактная версия метрик внутри диалога --- */
 
 .compact {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .compact .metric {
-  padding: 16px;
+  min-width: 0;
+  padding: 20px;
 }
 
 .compact .metric-value {
-  font-size: 26px;
+  font-size: 29px;
 }
 
 .compact .old-value {
@@ -1443,29 +1558,31 @@ footer b {
 }
 
 .compact .metric-value small {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .compact .metric-label {
-  font-size: 10px;
+  font-size: 14px;
 }
 
 .compact .metric-bottom {
-  font-size: 8px;
+  font-size: 10px;
 }
 
 /* --- мини-карта внутри диалога --- */
 
 .mini-map {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .mini-map .city-map {
-  height: 320px;
-  min-height: 320px;
+  height: clamp(220px, 30vh, 300px);
+  min-height: 220px;
 }
 
 .mini-map .map-top {
@@ -1483,26 +1600,39 @@ footer b {
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 20px;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.form-actions button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .danger-button {
   border: 1px solid #dfc6b7;
   color: #a07053;
   background: white;
-  padding: 12px 16px;
+  padding: 14px 20px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 14px;
+}
+
+.dialog .primary,
+.dialog .secondary {
+  padding: 15px 22px;
+  font-size: 14px;
 }
 
 blockquote {
   margin: 15px 0 20px;
   padding: 15px 18px;
-  border-left: 3px solid #c7d7b8;
-  background: #f8faf3;
+  border-left: 3px solid #B8CBD7;
+  background: #F3F7FA;
   font-size: 12px;
-  color: #7e8c6d;
+  color: #42B3FF;
   line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1510,8 +1640,8 @@ blockquote {
 
 .loading-text {
   padding: 20px 0;
-  color: #8a9a78;
-  font-size: 12px;
+  color: #5080B0;
+  font-size: 14px;
 }
 
 /* ==========================================================================
@@ -1524,7 +1654,7 @@ blockquote {
   }
 
   .hero h1 {
-    font-size: 59px;
+    font-size: 50px;
   }
 }
 
@@ -1546,7 +1676,7 @@ blockquote {
   }
 
   .workspace {
-    grid-template-columns: 244px 1fr;
+    grid-template-columns: 290px minmax(0, 1fr);
   }
 
   .control-panel {
@@ -1559,11 +1689,11 @@ blockquote {
   }
 
   .tool strong {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .tool small {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .map-top {
@@ -1580,8 +1710,16 @@ blockquote {
     padding: 18px;
   }
 
+  .metric-label {
+    font-size: 13px;
+  }
+
   .metric-value {
-    font-size: 30px;
+    font-size: 34px;
+  }
+
+  .metric-bottom {
+    font-size: 10px;
   }
 
   .selection-strip {
@@ -1598,7 +1736,7 @@ blockquote {
   }
 
   .hero h1 {
-    font-size: 43px;
+    font-size: 42px;
   }
 
   .hero-aside {
@@ -1620,26 +1758,32 @@ blockquote {
   }
 
   .brand {
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .brand-mark {
-    width: 34px;
-    height: 34px;
-    line-height: 30px;
-    font-size: 24px;
+    width: 38px;
+    height: 38px;
+    line-height: 34px;
+    font-size: 27px;
   }
 
   .site-header nav {
     order: 3;
     width: 100%;
     justify-content: center;
-    gap: 35px;
-    height: 32px;
+    gap: 28px;
+    height: 38px;
   }
 
   .site-header nav button {
-    font-size: 11px;
+    font-size: 13px;
+  }
+
+  .toast-container {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
   }
 
   .account {
@@ -1652,18 +1796,18 @@ blockquote {
   }
 
   .account .primary {
-    font-size: 10px !important;
-    padding: 9px 11px !important;
+    font-size: 12px !important;
+    padding: 10px 12px !important;
   }
 
   .account .text-button {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .avatar {
-    width: 25px;
-    height: 25px;
-    font-size: 10px;
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
   }
 
   main {
@@ -1681,7 +1825,7 @@ blockquote {
   }
 
   .hero p {
-    font-size: 11px;
+    font-size: 15px;
   }
 
   .hero p br {
@@ -1693,7 +1837,7 @@ blockquote {
   }
 
   .eyebrow {
-    font-size: 8px;
+    font-size: 10px;
     letter-spacing: 1.2px;
   }
 
@@ -1724,7 +1868,7 @@ blockquote {
   }
 
   .tool small {
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .tool strong {
@@ -1742,7 +1886,7 @@ blockquote {
   }
 
   .moderation-note p {
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .dataset-note {
@@ -1778,7 +1922,7 @@ blockquote {
 
   .selection-strip button {
     margin-left: auto;
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .analytics {
@@ -1787,7 +1931,11 @@ blockquote {
 
   .section-heading h2,
   .method h2 {
-    font-size: 23px;
+    font-size: 25px;
+  }
+
+  .analytics .section-heading h2 {
+    font-size: 27px;
   }
 
   .section-heading {
@@ -1795,7 +1943,7 @@ blockquote {
   }
 
   .pill {
-    font-size: 8px;
+    font-size: 10px;
     white-space: nowrap;
   }
 
@@ -1808,22 +1956,22 @@ blockquote {
   }
 
   .metric-label {
-    font-size: 9px;
+    font-size: 13px;
     line-height: 1.5;
     min-height: 26px;
   }
 
   .metric-value {
-    font-size: 25px;
+    font-size: 28px;
     margin: 12px 0;
   }
 
   .metric-value small {
-    font-size: 9px;
+    font-size: 13px;
   }
 
   .metric-bottom {
-    font-size: 8px;
+    font-size: 9px;
     display: block;
   }
 
@@ -1834,22 +1982,23 @@ blockquote {
 
   .method-grid {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 24px;
   }
 
   .method-grid article > span {
     float: left;
-    width: 28px;
-    margin-top: 2px;
+    width: 32px;
+    margin-top: 3px;
   }
 
   .method h3 {
-    margin: 0 0 8px 28px;
+    margin: 0 0 10px 32px;
+    font-size: 16px;
   }
 
   .method-grid p {
-    margin-left: 28px;
-    font-size: 11px;
+    margin-left: 32px;
+    font-size: 14px;
   }
 
   .method {
@@ -1867,8 +2016,14 @@ blockquote {
 
   footer {
     flex-wrap: wrap;
-    font-size: 8px;
-    gap: 13px;
+    align-items: flex-start;
+    font-size: 12px;
+    gap: 14px;
+    padding: 22px 18px;
+  }
+
+  footer > span:first-child {
+    font-size: 14px;
   }
 
   footer > span:nth-child(2) {
@@ -1877,7 +2032,7 @@ blockquote {
   }
 
   footer a {
-    margin-left: auto;
+    margin-left: 0;
   }
 
   .requests-section {
@@ -1885,7 +2040,7 @@ blockquote {
   }
 
   .requests-section h1 {
-    font-size: 32px;
+    font-size: 26px;
   }
 
   .requests-section .section-heading {
@@ -1893,7 +2048,11 @@ blockquote {
   }
 
   .requests-section .section-heading p {
-    font-size: 11px;
+    font-size: 13px;
+  }
+
+  .requests-section .section-kicker {
+    font-size: 10px;
   }
 
   .request-list {
@@ -1905,8 +2064,8 @@ blockquote {
   }
 
   .request-filters button {
-    font-size: 10px;
-    padding: 9px 11px;
+    font-size: 13px;
+    padding: 10px 12px;
   }
 
   .dialog-inner {
@@ -1914,7 +2073,7 @@ blockquote {
   }
 
   .dialog h2 {
-    font-size: 21px;
+    font-size: 23px;
   }
 
   .dialog .metrics-grid {
@@ -1952,8 +2111,8 @@ blockquote {
   }
 
   .mini-map .city-map {
-    height: 270px;
-    min-height: 270px;
+    height: 220px;
+    min-height: 220px;
   }
 
   .empty-state {
@@ -1965,7 +2124,7 @@ blockquote {
   }
 
   .empty-state p {
-    font-size: 12px;
+    font-size: 14px;
   }
 }
 
