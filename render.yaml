@@ -1,0 +1,68 @@
+# render.yaml — Infrastructure as Code для Render.com
+# Документация: https://render.com/docs/blueprint-spec
+
+services:
+  # ------------------------------------------------------------------
+  # Backend: FastAPI + Uvicorn
+  # ------------------------------------------------------------------
+  - type: web
+    name: city-backend
+    env: python
+    plan: free
+    region: frankfurt  # или oregon, singapore — выберите ближе к вам
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r backend/requirements.txt
+    startCommand: |
+      uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      # Автоматически подставляется строка подключения к БД
+      - key: DATABASE_URL
+        fromDatabase:
+          name: city-db
+          property: connectionString
+      # URL фронтенда для CORS. Заполним после первого деплоя.
+      - key: OBNINSK_ORIGINS
+        sync: false   # значение задаётся вручную в Dashboard
+      # Флаг для HTTPS-cookie (Cloudflare / Render)
+      - key: OBNINSK_SECURE_COOKIE
+        value: "1"
+      # Отключаем проверку Origin для локальной разработки,
+      # в продакшене CORS контролируется через OBNINSK_ORIGINS
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+
+  # ------------------------------------------------------------------
+  # Frontend: React + Vite (статический сайт)
+  # ------------------------------------------------------------------
+  - type: web
+    name: city-frontend
+    env: static
+    plan: free
+    region: frankfurt
+    buildCommand: |
+      cd frontend
+      npm ci --no-audit --no-fund
+      npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      # URL бэкенда. Подставляется автоматически из сервиса city-backend.
+      # Vite встраивает эту переменную в бандл на этапе сборки.
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: city-backend
+          property: url
+      - key: NODE_VERSION
+        value: "22.14.0"
+
+# ------------------------------------------------------------------
+# База данных PostgreSQL
+# ------------------------------------------------------------------
+databases:
+  - name: city-db
+    databaseName: obninsk2040
+    user: obninsk
+    plan: free
+    region: frankfurt
