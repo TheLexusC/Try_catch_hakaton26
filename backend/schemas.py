@@ -27,10 +27,25 @@ class Registration(Credentials):
         return value.strip() if isinstance(value, str) else value
 
 
+class Values(StrictModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True, allow_inf_nan=False)
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    kind: Literal['home','stop','park','school','clinic','shop'] | None = None
+    x: float | None = Field(default=None, ge=0, le=20000)
+    y: float | None = Field(default=None, ge=0, le=20000)
+    residents: int | None = Field(default=None, ge=0, le=100000, strict=True)
+    capacity: int | None = Field(default=None, ge=1, le=100000, strict=True)
+    load: int | None = Field(default=None, ge=0, le=100000, strict=True)
+    a: str | None = Field(default=None, max_length=64)
+    b: str | None = Field(default=None, max_length=64)
+    closed: bool | None = Field(default=None, strict=True)
+
+
 class Action(StrictModel):
-    type: Literal['close_edge', 'open_edge', 'move_stop', 'add_park', 'remove_park']
-    target_id: str = Field(min_length=1, max_length=80)
-    facility_id: str | None = Field(default=None, max_length=80)
+    entity: Literal['object','node','edge']
+    operation: Literal['add','update','delete']
+    id: str = Field(pattern=r'^[a-zA-Z0-9_-]{1,64}$')
+    values: Values = Field(default_factory=Values)
 
 
 class Preview(StrictModel):

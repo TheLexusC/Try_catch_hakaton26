@@ -1,754 +1,111 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import CityMap from './components/CityMap.jsx';
+import React, {useCallback,useEffect,useRef,useState} from 'react';
+import CityMap,{kinds} from './components/CityMap.jsx';
 import ControlPanel from './components/ControlPanel.jsx';
-import MetricsPanel, { format } from './components/MetricsPanel.jsx';
+import MetricsPanel,{format} from './components/MetricsPanel.jsx';
 
-const actionNames = {
-  close_edge: 'Перекрыть дорожку',
-  open_edge: 'Открыть дорожку',
-  move_stop: 'Перенести остановку',
-  add_park: 'Добавить зелёную зону',
-  remove_park: 'Убрать зелёную зону'
-};
-
-const statuses = {
-  pending: 'На модерации',
-  approved: 'Одобрена · закрыта',
-  rejected: 'Отклонена · закрыта'
-};
-
-const date = value => new Date(value).toLocaleString('ru-RU', {
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit'
-});
-
-function Dialog({ title, onClose, children, wide = false, locked = false }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const d = ref.current;
-    d.showModal();
-    return () => d.close();
-  }, []);
-
-  return (
-    <dialog
-      ref={ref}
-      className={wide ? 'dialog wide' : 'dialog'}
-      aria-labelledby="dialog-title"
-      onCancel={e => {
-        e.preventDefault();
-        if (!locked) onClose();
-      }}
-      onClick={e => {
-        if (e.target === e.currentTarget && !locked) onClose();
-      }}
-    >
-      <div className="dialog-inner">
-        <div className="dialog-top">
-          <h2 id="dialog-title">{title}</h2>
-          <button
-            className="icon-button"
-            disabled={locked}
-            onClick={onClose}
-            aria-label="Закрыть окно"
-          >
-            ×
-          </button>
-        </div>
-        {children}
-      </div>
-    </dialog>
-  );
+const names={object:'Объект',edge:'Дорожка',node:'Узел'};
+const operations={add:'Добавление',update:'Изменение',delete:'Удаление'};
+const statuses={pending:'На модерации',approved:'Одобрена · закрыта',rejected:'Отклонена · закрыта'};
+const date=value=>new Date(value).toLocaleString('ru-RU');
+const title=a=>`${operations[a.operation]}: ${a.values?.name||names[a.entity]} · ${a.id.slice(0,10)}`;
+function Dialog({title,onClose,locked,children,narrow=false}){
+  const ref=useRef();
+  useEffect(()=>{const d=ref.current;d.showModal();return()=>d.close();},[]);
+  return <dialog ref={ref} className={"dialog "+(narrow?"narrow":"wide")} aria-labelledby="dialog-title" onCancel={e=>{e.preventDefault();if(!locked)onClose();}}><div className="dialog-inner"><div className="dialog-top"><h2 id="dialog-title">{title}</h2><button className="icon-button" aria-label="Закрыть окно" disabled={locked} onClick={onClose}>×</button></div>{children}</div></dialog>;
 }
 
-function Toast({ message, type, onClose }) {
-  const [fading, setFading] = useState(false);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    const fadeTimer = window.setTimeout(() => setFading(true), 4500);
-    const closeTimer = window.setTimeout(() => onCloseRef.current(), 5000);
-    return () => {
-      window.clearTimeout(fadeTimer);
-      window.clearTimeout(closeTimer);
-    };
-  }, [message]);
-
-  return (
-    <div className={`banner ${type} toast${fading ? ' is-fading' : ''}`} role={type === 'error' ? 'alert' : 'status'}>
-      {message}
-      <button onClick={onClose} aria-label="Скрыть уведомление">×</button>
-    </div>
-  );
-}
-
-export default function App() {
-  // Global / Session State
-  const [city, setCity] = useState(null);
-  const [session, setSession] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [auth, setAuth] = useState(null);
-  const [authError, setAuthError] = useState('');
-
-  // UI State
-  const [tab, setTab] = useState('map');
-  const [mode, setMode] = useState('inspect');
-  const [stopId, setStopId] = useState('');
-  const [selectedHome, setSelectedHome] = useState('home-17');
-  const [items, setItems] = useState([]);
-  const [filter, setFilter] = useState('all');
-  
-  // Status State
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
-  
-  // Draft / Review State
-  const [draft, setDraft] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [previewError, setPreviewError] = useState('');
-  const [reason, setReason] = useState('');
-  const [review, setReview] = useState(null);
-  const [reviewData, setReviewData] = useState(null);
-  const [reviewError, setReviewError] = useState('');
-  const [comment, setComment] = useState('');
-
-  const user = session?.user;
-
-  const api = useCallback(async (path, options = {}) => {
-    const response = await fetch('/api' + path, {
-      credentials: 'same-origin',
-      ...options,
-      headers: {
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(session?.csrf_token ? { 'X-CSRF-Token': session.csrf_token } : {}),
-        ...options.headers
-      }
-    });
-
-    let body;
-    try {
-      body = await response.json();
-    } catch {
-      throw new Error('Сервер вернул некорректный ответ. Проверьте, запущен ли backend.');
-    }
-
-    if (!response.ok) {
-      const e = new Error(
-        typeof body.detail === 'string' 
-          ? body.detail 
-          : response.status === 422 
-            ? 'Проверьте поля формы и выбранные объекты.' 
-            : 'Не удалось выполнить запрос'
-      );
-      e.status = response.status;
-      throw e;
-    }
-    return body;
-  }, [session?.csrf_token]);
-
-  const refreshCity = useCallback(async () => {
-    const body = await api('/city');
-    setCity(body);
-    setStopId(current => 
-      body.state.facilities.some(f => f.id === current) 
-        ? current 
-        : body.state.facilities.find(f => f.kind === 'stop')?.id || ''
-    );
-    return body;
-  }, [api]);
-
-  const refreshItems = useCallback(async () => {
-    const data = await api('/proposals');
-    setItems(data.items);
-  }, [api]);
-
-  useEffect(() => {
-    let active = true;
-
-    fetch('/api/city')
-      .then(r => {
-        if (!r.ok) throw Error('Не удалось загрузить карту');
-        return r.json();
-      })
-      .then(body => {
-        if (active) {
-          setCity(body);
-          setStopId(body.state.facilities.find(f => f.kind === 'stop')?.id || '');
-        }
-      })
-      .catch(e => active && setError(e.message));
-
-    fetch('/api/auth/me', { credentials: 'same-origin' })
-      .then(async r => {
-        if (r.ok) {
-          const data = await r.json();
-          if (active) setSession(data);
-        } else if (r.status !== 401) {
-          throw Error('Не удалось проверить сессию');
-        }
-      })
-      .catch(e => active && setError(e.message))
-      .finally(() => active && setAuthChecked(true));
-
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      refreshItems().catch(e => setError(e.message));
-    } else {
-      setItems([]);
-    }
-  }, [user?.id, refreshItems]);
-
-  const openAuth = type => {
-    setAuthError('');
-    setAuth(type);
+export default function App(){
+  const [city,setCity]=useState(null),[session,setSession]=useState(null),[mode,setMode]=useState('inspect'),[tab,setTab]=useState('map');
+  const [query,setQuery]=useState(''),[page,setPage]=useState(0),[focusRequest,setFocusRequest]=useState(0),[movingStop,setMovingStop]=useState(null);
+  const [home,setHome]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const [auth,setAuth]=useState(null),[items,setItems]=useState([]),[editor,setEditor]=useState(null),[reason,setReason]=useState('');
+  const [review,setReview]=useState(null),[reviewPreview,setReviewPreview]=useState(null),[comment,setComment]=useState(''),[formError,setFormError]=useState('');
+  const user=session?.user;
+  const focusHome=id=>{setHome(id);setFocusRequest(n=>n+1);};
+  const api=useCallback(async(path,payload)=>{
+    const response=await fetch('/api'+path,{credentials:'same-origin',...(payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':session?.csrf_token||''},body:JSON.stringify(payload)})});
+    let result;try{result=await response.json();}catch{throw Error('Не удалось прочитать ответ сервера. Проверьте запуск backend.');}
+    if(!response.ok){const e=Error(typeof result.detail==='string'?result.detail:'Проверьте обязательные поля и выбранные объекты.');e.status=response.status;throw e;}
+    return result;
+  },[session?.csrf_token]);
+  const loadCity=useCallback(async()=>{const next=await api('/city');setCity(next);setHome(current=>next.metrics.rows.some(h=>h.id===current)?current:(next.metrics.rows.find(h=>h.name.includes('Курчатова, 17'))?.id||next.metrics.rows[0]?.id));return next;},[api]);
+  const loadRequests=useCallback(async()=>{const r=await api('/proposals');setItems(r.items);},[api]);
+  useEffect(()=>{loadCity().catch(e=>setError(e.message));api('/auth/me').then(setSession).catch(e=>{if(e.status!==401)setError(e.message);});},[]);
+  useEffect(()=>{if(user)loadRequests().catch(e=>setError(e.message));else setItems([]);},[user?.id,loadRequests]);
+  const run=async fn=>{setBusy(true);setError('');try{await fn();}catch(e){setError(e.message);}finally{setBusy(false);}};
+  const refresh=()=>run(async()=>{await loadCity();if(user){setSession(await api('/auth/me'));await loadRequests();}setNotice('Данные PostgreSQL обновлены.');});
+  const login=type=>{setFormError('');setAuth(type);};
+  const authenticate=async e=>{
+    e.preventDefault();const fields=new FormData(e.currentTarget);const payload=Object.fromEntries(fields);setBusy(true);setFormError('');
+    try{setSession(await api('/auth/'+auth,payload));setAuth(null);setNotice('Вы вошли. Теперь можно отправлять изменения на модерацию.');}catch(e){setFormError(e.message);}finally{setBusy(false);}
   };
-
-  const authenticate = async e => {
-    e.preventDefault();
-    setBusy(true);
-    setAuthError('');
-    
-    const fields = new FormData(e.currentTarget);
-    const payload = {
-      email: fields.get('email').trim(),
-      password: fields.get('password')
-    };
-    
-    if (auth === 'register') {
-      payload.name = fields.get('name').trim();
-    }
-    
-    try {
-      const result = await api('/auth/' + auth, {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-      setSession(result);
-      setAuth(null);
-      setNotice(auth === 'register' ? 'Аккаунт создан. Теперь можно предлагать изменения.' : 'Вы вошли в аккаунт.');
-    } catch (e) {
-      setAuthError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const logout=()=>run(async()=>{await api('/auth/logout',{});setSession(null);setTab('map');});
+  const openEditor=(entity,operation,item={})=>{
+    if(!user){login('login');return;}if(busy)return;
+    const {id,...values}=item;
+    setEditor({action:{entity,operation,id:id||`${entity[0]}-${crypto.randomUUID()}`,values:operation==='delete'?{}:values},base_version:city.state.version});
+    setReason('');setFormError('');
   };
-
-  const logout = async () => {
-    setBusy(true);
-    try {
-      await api('/auth/logout', { method: 'POST', body: '{}' });
-      setSession(null);
-      setItems([]);
-      setTab('map');
-      setMode('inspect');
-      setNotice('Вы вышли из аккаунта.');
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const moveStop=stop=>{if(!user){login('login');return;}setMovingStop(stop);setMode('move_stop');};
+  const changeMode=value=>{setMode(value);if(value!=='move_stop')setMovingStop(null);};
+  const place=point=>{if(mode==='move_stop'){if(movingStop)openEditor('object','update',{id:movingStop.id,...point});return;}openEditor('object','add',{name:'Новая зелёная зона',kind:'park',...point});};
+  const select=(entity,item)=>entity==='edge'?openEditor('edge','update',{id:item.id,closed:!item.closed}):openEditor('object','delete',item);
+  const updateField=(key,value)=>setEditor(current=>({...current,action:{...current.action,values:{...current.action.values,[key]:value}}}));
+  const previewChange=async e=>{
+    e.preventDefault();setBusy(true);setFormError('');
+    try{const preview=await api('/preview',{action:editor.action,base_version:editor.base_version});setEditor(current=>({...current,preview}));}catch(e){setFormError(e.message);}finally{setBusy(false);}
   };
-
-  const propose = async action => {
-    if (busy) return;
-    if (!user) {
-      openAuth('login');
-      return;
-    }
-    
-    const change = { action, base_version: city.state.version };
-    setDraft(change);
-    setReason('');
-    setPreview(null);
-    setPreviewError('');
-    setBusy(true);
-    
-    try {
-      setPreview(await api('/preview', { method: 'POST', body: JSON.stringify(change) }));
-    } catch (e) {
-      setPreviewError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const submit=async e=>{
+    e.preventDefault();setBusy(true);setFormError('');
+    try{const r=await api('/proposals',{action:editor.action,base_version:editor.base_version,reason});setEditor(null);setMode('inspect');setNotice(r.message);setTab('requests');await loadRequests();}catch(e){setFormError(e.message);}finally{setBusy(false);}
   };
-
-  const submit = async e => {
-    e.preventDefault();
-    setBusy(true);
-    setPreviewError('');
-    try {
-      const result = await api('/proposals', { 
-        method: 'POST', 
-        body: JSON.stringify({ ...draft, reason }) 
-      });
-      setDraft(null);
-      setPreview(null);
-      setMode('inspect');
-      setNotice(result.message);
-      setTab('requests');
-      await refreshItems();
-    } catch (e) {
-      setPreviewError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const openReview=async item=>{
+    setReview(item);setReviewPreview(null);setComment('');setFormError('');setBusy(true);
+    try{setReviewPreview(await api(`/proposals/${item.id}/preview`));}catch(e){setFormError(e.message);}finally{setBusy(false);}
   };
-
-  const openReview = async item => {
-    setReview(item);
-    setReviewData(null);
-    setReviewError('');
-    setComment('');
-    if (item.status !== 'pending') return;
-    
-    setBusy(true);
-    try {
-      setReviewData(await api(`/proposals/${item.id}/preview`));
-    } catch (e) {
-      setReviewError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const decide=async decision=>{
+    setBusy(true);setFormError('');
+    try{await api(`/proposals/${review.id}/decision`,{decision,comment});setReview(null);await loadCity();await loadRequests();setNotice('Решение сохранено. Заявка закрыта.');}catch(e){setFormError(e.message);}finally{setBusy(false);}
   };
+  const pending=items.filter(i=>i.status==='pending').length;
+  const selected=city?.metrics.rows.find(r=>r.id===home)||city?.metrics.rows[0];
+  const action=editor?.action, values=action?.values;
+  const found=city?.state.objects.filter(o=>(o.name+' '+kinds[o.kind]).toLocaleLowerCase('ru-RU').includes(query.toLocaleLowerCase('ru-RU')))||[];
+  const shown=found.slice(page*50,(page+1)*50);
 
-  const decide = async decision => {
-    if (comment.trim().length < 5) {
-      setReviewError('Напишите обоснование решения: не менее 5 символов.');
-      return;
-    }
-    
-    setBusy(true);
-    setReviewError('');
-    try {
-      await api(`/proposals/${review.id}/decision`, {
-        method: 'POST',
-        body: JSON.stringify({ decision, comment })
-      });
-      setReview(null);
-      setReviewData(null);
-      setNotice(
-        decision === 'approved' 
-          ? 'Заявка одобрена и закрыта. Общая карта обновлена.' 
-          : 'Заявка отклонена и закрыта. Карта не изменилась.'
-      );
-      await refreshCity();
-      await refreshItems();
-    } catch (e) {
-      setReviewError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
-  const refresh = async () => {
-    setBusy(true);
-    setError('');
-    try {
-      await refreshCity();
-      if (user) {
-        const current = await api('/auth/me');
-        setSession(current);
-        await refreshItems();
-      }
-      setNotice('Данные обновлены.');
-    } catch (e) {
-      if (e.status === 401) {
-        setSession(null);
-        setItems([]);
-      }
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const pending = items.filter(i => i.status === 'pending').length;
-  const selectedRow = city?.metrics.rows.find(r => r.id === selectedHome) || city?.metrics.rows[0];
-  const visible = items.filter(i => filter === 'all' || (filter === 'pending' ? i.status === 'pending' : i.status !== 'pending'));
-  
-  const targetLabel = action => {
-    if (!city) return action.target_id;
-    const node = city.map.nodes.find(n => n.id === action.target_id);
-    return node ? `узел ${node.label}` : city.state.facilities.find(f => f.id === action.target_id)?.name || `участок ${action.target_id}`;
-  };
-
-  return (
-    <>
-      <header className="site-header">
-        <a className="brand" href="/" aria-label="Обнинск 2040, главная">
-          <span className="brand-mark">о<span>↗</span></span>
-          <span>ОБНИНСК <b>2040</b><small>КОНСТРУКТОР ГОРОДА БУДУЩЕГО</small></span>
-        </a>
-        <nav aria-label="Главная навигация">
-          <button className={tab === 'map' ? 'nav-active' : ''} onClick={() => setTab('map')}>
-            Карта района
-          </button>
-          <button 
-            className={tab === 'requests' ? 'nav-active' : ''} 
-            onClick={() => {
-              setTab('requests');
-              if (user) refreshItems().catch(e => setError(e.message));
-            }}
-          >
-            {user?.role === 'moderator' ? 'Модерация' : 'Мои заявки'}
-            {pending > 0 && <span className="count">{pending}</span>}
-          </button>
-        </nav>
-        <div className="account">
-          {user ? (
-            <>
-              <span className="avatar">{user.name[0].toUpperCase()}</span>
-              <span className="account-name">
-                {user.name}
-                <small>{user.role === 'moderator' ? 'Модератор' : 'Житель'}</small>
-              </span>
-              <button className="text-button" onClick={logout} disabled={busy}>Выйти</button>
-            </>
-          ) : (
-            <>
-              <button className="text-button" onClick={() => openAuth('login')} disabled={!authChecked}>Войти</button>
-              <button className="primary small" onClick={() => openAuth('register')} disabled={!authChecked}>Регистрация ↗</button>
-            </>
-          )}
-        </div>
-      </header>
-
-      {(error || notice) && (
-        <div className="toast-container" aria-live="polite">
-          {error && <Toast key={`error-${error}`} message={error} type="error" onClose={() => setError('')} />}
-          {notice && <Toast key={`notice-${notice}`} message={notice} type="success" onClose={() => setNotice('')} />}
-        </div>
-      )}
-
-      <main>
-        {tab === 'map' ? (
-          <>
-            <section className="hero">
-              <div>
-                <div className="eyebrow">
-                  <span className="live-dot"/> ОБНИНСК · УЛИЦА КУРЧАТОВА
-                </div>
-                <h1>Город ближе.<br/><span>Начните со своей улицы.</span></h1>
-                <p>Посмотрите на район глазами пешехода.<br/>Предложите изменение — и оцените его влияние на жизнь города.</p>
-              </div>
-              <div className="hero-aside">
-                <div className="coordinate">55.1040° N<br/>36.6180° E</div>
-                <div className="hero-stats">
-                  <div><strong>5</strong><span>жилых домов</span></div>
-                  <div><strong>{city ? format(city.metrics.total_residents) : '900'}</strong><span>условных жителей</span></div>
-                </div>
-              </div>
-            </section>
-
-            {!city ? (
-              <div className="empty-state">
-                <h2>{error ? 'Карта недоступна' : 'Загружаем улицу…'}</h2>
-                <p>Геометрия, маршруты и состояние городской модели.</p>
-                {error && <button className="primary" onClick={refresh}>Попробовать снова</button>}
-              </div>
-            ) : (
-              <>
-                <section className="workspace">
-                  <ControlPanel 
-                    mode={mode} setMode={setMode} 
-                    city={city} stopId={stopId} setStopId={setStopId} 
-                    onAction={propose} user={user} 
-                    onLogin={() => openAuth('login')} busy={busy} 
-                  />
-                  <CityMap 
-                    map={city.map} state={city.state} metrics={city.metrics} 
-                    mode={mode} stopId={stopId} onAction={propose} 
-                    selectedHome={selectedHome} setSelectedHome={setSelectedHome} 
-                  />
-                </section>
-                
-                <div className="selection-strip">
-                  <span><b>{selectedRow.name}</b> · {selectedRow.residents} условных жителей</span>
-                  <span>Остановка <b>{format(selectedRow.stop_distance)} м</b></span>
-                  <span>Парк <b>{format(selectedRow.park_distance)} м</b></span>
-                  <button onClick={refresh} disabled={busy}>↻ Обновить карту</button>
-                </div>
-                
-                <section className="analytics">
-                  <div className="section-heading">
-                    <div>
-                      <div className="section-kicker">02 / ДОСТУПНОСТЬ СРЕДЫ</div>
-                      <h2>Что говорят маршруты</h2>
-                    </div>
-                    <span className="pill">Общая карта · версия {city.state.version}</span>
-                  </div>
-                  <MetricsPanel before={city.metrics} />
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Жилой объект</th>
-                          <th>Жителей</th>
-                          <th>До остановки</th>
-                          <th>До парка</th>
-                          <th>Парк в 500 м</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {city.metrics.rows.map(r => (
-                          <tr key={r.id} className={r.id === selectedHome ? 'selected-row' : ''}>
-                            <td>
-                              <button className="table-link" onClick={() => { setSelectedHome(r.id); setMode('inspect'); }}>
-                                {r.name}
-                              </button>
-                            </td>
-                            <td>{r.residents}</td>
-                            <td>{r.stop_distance === null ? 'Нет пути' : format(r.stop_distance) + ' м'}</td>
-                            <td>{r.park_distance === null ? 'Нет пути' : format(r.park_distance) + ' м'}</td>
-                            <td>
-                              <span className={'access-tag ' + (r.park_access ? 'yes' : 'no')}>
-                                {r.park_access ? 'Доступен' : 'Вне доступа'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section className="method">
-                  <div className="section-kicker">03 / ПРОЗРАЧНАЯ МОДЕЛЬ</div>
-                  <h2>Реальная улица. Понятные расчёты.</h2>
-                  <div className="method-grid">
-                    <article>
-                      <span>01</span>
-                      <h3>Карта из OpenStreetMap</h3>
-                      <p>Дома и геометрия дорожек взяты из открытых данных. Модель ограничена участком улицы Курчатова. </p>
-                    </article>
-                    <article>
-                      <span>02</span>
-                      <h3>Кратчайший путь</h3>
-                      <p>Алгоритм Дейкстры на сервере находит путь до ближайшего парка и остановки. Расстояние измеряется по дорожкам, а не по прямой.</p>
-                    </article>
-                    <article>
-                      <span>03</span>
-                      <h3>Изменения с проверкой</h3>
-                      <p>Выберите объект, оцените расчёт «до / после» и отправьте предложение. Модератор примет решение и закроет заявку.</p>
-                    </article>
-                  </div>
-                  <details>
-                    <summary>Допущения и источники данных</summary>
-                    <p>{city.map.source.notes}</p>
-                    <p>Средний путь до остановки считается по доступным домам без веса населения. Дома без маршрута показаны отдельно. Доля доступа к парку взвешена по условному числу жителей, порог — 500 м. Скорость ходьбы, лестницы как барьер, рельеф и светофоры не моделируются.</p>
-                    <p>Снимок: {city.map.source.downloaded}. Геоданные: <a href={city.map.source.url} target="_blank" rel="noreferrer">© OpenStreetMap contributors, ODbL 1.0</a>. Новые зелёные зоны задаются точками доступа, а не земельными участками. Это учебная модель, не план утверждённых городских работ.</p>
-                  </details>
-                </section>
-              </>
-            )}
-          </>
-        ) : (
-          <section className="requests-section">
-            <div className="section-heading">
-              <div>
-                <div className="section-kicker">ПРЕДЛОЖЕНИЯ ЖИТЕЛЕЙ</div>
-                <h1>{user?.role === 'moderator' ? 'Модерация изменений' : 'Мои заявки'}</h1>
-                <p>{user?.role === 'moderator' ? 'Оцените влияние, примите решение и закройте заявку.' : 'Все ваши предложения и решения модераторов — в одном месте.'}</p>
-              </div>
-              {user && <button className="secondary" disabled={busy} onClick={refresh}>↻ Обновить</button>}
-            </div>
-
-            {!user ? (
-              <div className="empty-state">
-                <div className="empty-icon">◇</div>
-                <h2>У каждого предложения есть автор</h2>
-                <p>Войдите или зарегистрируйтесь, чтобы отправлять изменения и следить за их статусом.</p>
-                <button className="primary" onClick={() => openAuth('login')}>Войти в аккаунт</button>
-              </div>
-            ) : (
-              <>
-                <div className="request-filters">
-                  {[['all', 'Все заявки'], ['pending', 'На модерации'], ['closed', 'Закрытые']].map(([id, title]) => (
-                    <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>
-                      {title}{id === 'pending' && <span>{pending}</span>}
-                    </button>
-                  ))}
-                </div>
-                
-                {visible.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">↗</div>
-                    <h2>Пока здесь нет заявок</h2>
-                    <p>Начните с карты: выберите дорожку, остановку или место для парка.</p>
-                    <button className="primary" onClick={() => setTab('map')}>Перейти к карте</button>
-                  </div>
-                ) : (
-                  <div className="request-list">
-                    {visible.map(item => (
-                      <article className="request-card" key={item.id}>
-                        <div className="request-card-top">
-                          <span className={'status ' + item.status}>{statuses[item.status]}</span>
-                          <time>{date(item.created_at)}</time>
-                        </div>
-                        <h3>{actionNames[item.action.type]}</h3>
-                        <p className="target-label">{targetLabel(item.action)} · версия карты {item.base_version}</p>
-                        <p className="request-reason">{item.reason}</p>
-                        
-                        {item.status !== 'pending' && (
-                          <div className="decision-note">
-                            <b>Решение модератора</b>
-                            <p>{item.comment}</p>
-                            <small>{item.reviewer_name} · {date(item.closed_at)}</small>
-                          </div>
-                        )}
-                        
-                        <div className="request-card-bottom">
-                          <span>{item.author_name} · #{item.id.slice(0, 8)}</span>
-                          {user.role === 'moderator' && item.status === 'pending' && (
-                            <button className="primary small" disabled={busy} onClick={() => openReview(item)}>
-                              Рассмотреть →
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-                <p className="muted small-text">После отправки заявка ожидает решения. Одобрение применяет изменение к общей карте; отклонение сохраняет карту. Оба решения закрывают заявку.</p>
-              </>
-            )}
+  return <>
+    <header className="site-header"><a className="brand" href="/"><span className="brand-mark">о<span>↗</span></span><span>ОБНИНСК <b>2040</b><small>КОНСТРУКТОР ГОРОДА</small></span></a><nav aria-label="Навигация"><button className={tab==='map'?'nav-active':''} onClick={()=>setTab('map')}>Карта города</button><button className={tab==='requests'?'nav-active':''} onClick={()=>{setTab('requests');if(user)loadRequests().catch(e=>setError(e.message));}}>{user?.role==='moderator'?'Модерация':'Мои заявки'} {pending>0&&<span className="count">{pending}</span>}</button></nav><div className="account">{user?<><span className="account-name">{user.name}<small>{user.role==='moderator'?'Модератор':'Житель'}</small></span><button className="text-button" disabled={busy} onClick={logout}>Выйти</button></>:<><button className="text-button" onClick={()=>login('login')}>Войти</button><button className="primary small" onClick={()=>login('register')}>Регистрация</button></>}</div></header>
+    <main>
+      {error&&<div className="banner error" role="alert">{error}<button aria-label="Скрыть ошибку" onClick={()=>setError('')}>×</button></div>}
+      {notice&&<div className="banner success" role="status">{notice}<button aria-label="Скрыть уведомление" onClick={()=>setNotice('')}>×</button></div>}
+      {tab==='map'?<>
+        <section className="hero"><div><div className="eyebrow"><span className="live-dot"/> ОБНИНСК · РЕАЛЬНАЯ КАРТА ГОРОДА</div><h1>Город ближе.<br/><span>Начните со своей улицы.</span></h1><p>Посмотрите на город глазами пешехода.<br/>Предложите изменение — и оцените его влияние на жизнь города.</p></div><div className="hero-aside"><div className="coordinate">55.1080° N<br/>36.6120° E</div><div className="hero-stats"><div><strong>{city?.state.objects.length??'—'}</strong><span>объектов</span></div><div><strong>{format(city?.metrics.total_residents)}</strong><span>жителей · оценка</span></div></div></div></section>
+        {!city?<div className="empty-state"><h2>Подключаем район…</h2><p>Запустите PostgreSQL и backend через «Запустить.command».</p><button className="primary" onClick={refresh}>Обновить</button></div>:<>
+          <section className="workspace"><ControlPanel mode={mode} setMode={changeMode} stops={city.state.objects.filter(o=>o.kind==='stop')} movingStop={movingStop} onMoveStop={moveStop} user={user} onLogin={()=>login('login')} busy={busy}/><CityMap state={city.state} metrics={city.metrics} mode={mode} onSelect={select} onPlace={place} onMoveStop={moveStop} movingStopId={movingStop?.id} selectedHome={home} setSelectedHome={focusHome} focusRequest={focusRequest}/></section>
+          <div className="selection-strip"><span>{selected?<><b>{selected.name}</b> · остановка {format(selected.stop_distance)} м · парк {format(selected.park_distance)} м</>:'В районе пока нет жилых домов'}</span><span>{city.state.nodes.length} узлов · {city.state.edges.length} дорожек</span><button onClick={refresh} disabled={busy}>↻ Обновить</button></div>
+          <section className="analytics"><div className="section-heading"><div><div className="section-kicker">02 / МЕТРИКИ РАЙОНА</div><h2>Доступность и нагрузка</h2></div><span className="pill">Версия {city.state.version} · PostgreSQL</span></div><MetricsPanel before={city.metrics}/><div className="load-summary">Контуры и адреса — OSM. Число жителей — расчётная оценка, нагрузка не измерена. Данные можно уточнить отдельно в PostgreSQL.</div>
+            <div className="object-search"><input aria-label="Поиск здания" placeholder="Найти дом, улицу или объект…" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/><small>Найдено: {found.length.toLocaleString('ru-RU')}</small></div>
+            {mode==='move_stop'&&<div className="readonly-note" role="status">{movingStop?`Перенос «${movingStop.name}»: нажмите на новое место на карте. Остановка останется на прежнем месте до одобрения заявки.`:'Выберите остановку в панели слева или нажмите на её маркер.'}</div>}
+            <div className="table-wrap"><table><thead><tr><th>Объект</th><th>Тип</th><th>Жителей · оценка</th><th>Действия</th></tr></thead><tbody>{shown.map(o=><tr key={o.id}><td><button className="table-link" onClick={()=>{if(o.kind==='home')focusHome(o.id);else select('object',o);setMode('inspect');}}>{o.name}</button></td><td>{kinds[o.kind]}</td><td>{o.kind==='home'?'≈ '+format(o.residents):'—'}</td><td className="table-actions">{o.kind==='stop'&&<button onClick={()=>{moveStop(o);window.scrollTo({top:250,behavior:'smooth'});}}>Заявка на перенос</button>}<button onClick={()=>openEditor('object','delete',o)}>{o.geom&&o.kind!=='park'?'Заявка на снос':'Заявка на удаление'}</button></td></tr>)}</tbody></table></div>
+            <div className="pagination"><button disabled={page===0} onClick={()=>setPage(p=>p-1)}>← Назад</button><span>{page+1} / {Math.max(1,Math.ceil(found.length/50))}</span><button disabled={(page+1)*50>=found.length} onClick={()=>setPage(p=>p+1)}>Далее →</button></div>
+            <details className="routes-details"><summary>Маршруты всех жилых домов</summary><div className="table-wrap"><table><thead><tr><th>Дом</th><th>Остановка</th><th>Парк</th><th>Парк в 500 м</th></tr></thead><tbody>{city.metrics.rows.filter(r=>r.name.toLocaleLowerCase('ru-RU').includes(query.toLocaleLowerCase('ru-RU'))).slice(0,100).map(r=><tr key={r.id}><td><button className="table-link" onClick={()=>{focusHome(r.id);setMode('inspect');}}>{r.name}</button></td><td>{r.stop_distance===null?'Нет пути':format(r.stop_distance)+' м'}</td><td>{r.park_distance===null?'Нет пути':format(r.park_distance)+' м'}</td><td>{r.park_access?'Да':'Нет'}</td></tr>)}</tbody></table></div></details>
           </section>
-        )}
-      </main>
+          <section className="method"><div className="section-kicker">03 / КАК УСТРОЕНО</div><h2>Один объект — одна запись.</h2><div className="method-grid"><article><h3>PostgreSQL</h3><p>Узлы, дорожки и объекты — отдельные таблицы. В них координаты, жители, нагрузка и вместимость. Контуры зданий хранятся одним GeoJSON-значением на объект, без ручной разметки в коде.</p></article><article><h3>Дейкстра</h3><p>Длина пути — сумма участков и подходов к ближайшим узлам. До остановки считаем среднее по доступным домам; доступ к парку — долю жителей в 500 м.</p></article><article><h3>Модерация</h3><p>Предпросмотр → обоснование → заявка → решение. Одобрение применяет изменение, отклонение сохраняет район. Оба решения закрывают заявку.</p></article></div><p className="model-note">{city.map.notes} Нагрузка показана отдельно и не изменяет геометрическую длину маршрута. Существующие здания нельзя двигать или менять. Жители предлагают снос существующего объекта, перенос остановки, новый парк или остановку, открытие или перекрытие дорожки.</p></section>
+        </>}
+      </>:<section className="requests-section"><div className="section-heading"><div><div className="section-kicker">ПРЕДЛОЖЕНИЯ ЖИТЕЛЕЙ</div><h1>{user?.role==='moderator'?'Модерация изменений':'Мои заявки'}</h1></div><button className="secondary" onClick={refresh} disabled={busy}>↻ Обновить</button></div>{!user?<div className="empty-state"><h2>Войдите для работы с заявками</h2><button className="primary" onClick={()=>login('login')}>Войти</button></div>:items.length===0?<div className="empty-state"><h2>Заявок пока нет</h2><p>Выберите действие на карте и отправьте предложение.</p><button className="primary" onClick={()=>setTab('map')}>Открыть район</button></div>:<div className="request-list">{items.map(item=><article className="request-card" key={item.id}><div className="request-card-top"><span className={'status '+item.status}>{statuses[item.status]}</span><time>{date(item.created_at)}</time></div><h3>{operations[item.action.operation]}: {item.target_name||title(item.action)}</h3><p className="request-reason">{item.reason}</p>{item.comment&&<div className="decision-note"><b>{item.reviewer_name} · {date(item.closed_at)}</b><p>{item.comment}</p></div>}<div className="request-card-bottom"><span>{item.author_name} · версия {item.base_version}</span>{user.role==='moderator'&&item.status==='pending'&&<button className="primary small" disabled={busy} onClick={()=>openReview(item)}>Рассмотреть</button>}</div></article>)}</div>}</section>}
+      <footer><span>ОБНИНСК <b>2040</b></span><span>Реальная геометрия © OpenStreetMap contributors · ODbL 1.0</span></footer>
+    </main>
 
-      <footer>
-        <span>ОБНИНСК <b>2040</b></span>
-        <span>Создаём город, в котором хочется ходить пешком.</span>
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">Данные © OpenStreetMap</a>
-      </footer>
-
-      {auth && (
-        <Dialog 
-          title={auth === 'register' ? 'Присоединиться к городу' : 'С возвращением'} 
-          onClose={() => setAuth(null)} 
-          locked={busy}
-        >
-          <p className="dialog-description">
-            {auth === 'register' ? 'Создайте аккаунт, чтобы предлагать изменения своей улицы.' : 'Войдите, чтобы продолжить работу с предложениями.'}
-          </p>
-          <form onSubmit={authenticate}>
-            {auth === 'register' && (
-              <label className="field">
-                Имя
-                <input name="name" autoComplete="name" minLength="2" maxLength="60" required placeholder="Как к вам обращаться"/>
-              </label>
-            )}
-            <label className="field">
-              Email
-              <input name="email" type="email" autoComplete="email" required maxLength="254" placeholder="you@example.com"/>
-            </label>
-            <label className="field">
-              Пароль
-              <input name="password" type="password" autoComplete={auth === 'register' ? 'new-password' : 'current-password'} minLength="10" maxLength="128" required placeholder="Не менее 10 символов"/>
-            </label>
-            
-            {auth === 'register' && (
-              <p className="form-note">Email используется для входа. Подтверждение email и восстановление пароля в этой локальной версии не подключены.</p>
-            )}
-            
-            {authError && <p className="form-error" role="alert">{authError}</p>}
-            
-            <button className="primary full" disabled={busy}>
-              {busy ? 'Подождите…' : auth === 'register' ? 'Создать аккаунт →' : 'Войти →'}
-            </button>
-          </form>
-          <p className="auth-switch">
-            {auth === 'register' ? 'Уже зарегистрированы?' : 'Пока нет аккаунта?'}
-            <button disabled={busy} onClick={() => openAuth(auth === 'register' ? 'login' : 'register')}>
-              {auth === 'register' ? 'Войти' : 'Зарегистрироваться'}
-            </button>
-          </p>
-        </Dialog>
-      )}
-
-      {draft && (
-        <Dialog title="Отправить изменение на модерацию" wide locked={busy} onClose={() => { setDraft(null); setPreview(null); }}>
-          <div className="proposal-heading">
-            <span className="status pending">ПРЕДЛОЖЕНИЕ</span>
-            <h3>{actionNames[draft.action.type]}</h3>
-            <p>{targetLabel(draft.action)} · версия {draft.base_version}</p>
-          </div>
-          
-          {preview ? (
-            <>
-              <p className="dialog-description">Так изменится доступность, если предложение одобрят. Сейчас общая карта остаётся прежней.</p>
-              <MetricsPanel before={preview.before} after={preview.after} compact />
-              <div className="mini-map">
-                <CityMap map={city.map} state={preview.state} metrics={preview.after} mode="inspect" stopId={stopId} onAction={() => {}} selectedHome={selectedHome} setSelectedHome={setSelectedHome} previewing />
-              </div>
-            </>
-          ) : !previewError && (
-            <p className="loading-text">Рассчитываем маршруты…</p>
-          )}
-          
-          {previewError && <p className="form-error" role="alert">{previewError}</p>}
-          
-          <form onSubmit={submit}>
-            <label className="field">
-              Почему это нужно району?
-              <textarea value={reason} onChange={e => setReason(e.target.value)} minLength="10" maxLength="1000" required rows="3" placeholder="Опишите проблему и пользу изменения. Не менее 10 символов."/>
-            </label>
-            <div className="form-actions">
-              <button type="button" className="secondary" disabled={busy} onClick={() => { setDraft(null); setPreview(null); }}>Отмена</button>
-              <button className="primary" disabled={busy || !preview || reason.trim().length < 10}>
-                {busy ? 'Подождите…' : 'Отправить на модерацию →'}
-              </button>
-            </div>
-          </form>
-        </Dialog>
-      )}
-
-      {review && (
-        <Dialog title="Рассмотрение заявки" wide locked={busy} onClose={() => setReview(null)}>
-          <div className="proposal-heading">
-            <span className={'status ' + review.status}>{statuses[review.status]}</span>
-            <h3>{actionNames[review.action.type]}</h3>
-            <p>{targetLabel(review.action)} · {review.author_name} · {date(review.created_at)}</p>
-          </div>
-          <blockquote>{review.reason}</blockquote>
-          
-          {reviewData && (
-            <>
-              <MetricsPanel before={reviewData.before} after={reviewData.after} compact />
-              <div className="mini-map">
-                <CityMap map={city.map} state={reviewData.state} metrics={reviewData.after} mode="inspect" stopId={stopId} onAction={() => {}} selectedHome={selectedHome} setSelectedHome={setSelectedHome} previewing />
-              </div>
-            </>
-          )}
-          
-          {reviewError && <p className="form-error" role="alert">{reviewError}</p>}
-          {busy && !reviewData && <p>Загружаем расчёт…</p>}
-          
-          {review.author_id === user?.id ? (
-            <p className="form-note">Свою заявку нельзя рассмотреть самостоятельно. Её должен проверить другой модератор.</p>
-          ) : (
-            <>
-              <label className="field">
-                Обоснование решения
-                <textarea rows="3" value={comment} onChange={e => setComment(e.target.value)} minLength="5" maxLength="1000" placeholder="Комментарий будет виден автору заявки"/>
-              </label>
-              <p className="form-note">Решение закроет заявку. Одобренное изменение сразу попадёт на общую карту. Устаревшую заявку можно отклонить и попросить автора отправить новую.</p>
-              <div className="form-actions">
-                <button className="danger-button" disabled={busy || comment.trim().length < 5} onClick={() => decide('rejected')}>Отклонить и закрыть</button>
-                <button className="primary" disabled={busy || !reviewData || comment.trim().length < 5} onClick={() => decide('approved')}>Одобрить и закрыть</button>
-              </div>
-            </>
-          )}
-        </Dialog>
-      )}
-    </>
-  );
+    {auth&&<Dialog narrow title={auth==='register'?'Регистрация':'Вход в аккаунт'} locked={busy} onClose={()=>setAuth(null)}><form onSubmit={authenticate}>{auth==='register'&&<label className="field">Имя<input name="name" required minLength="2" maxLength="60" autoComplete="name"/></label>}<label className="field">Email<input name="email" type="email" required autoComplete="email"/></label><label className="field">Пароль<input name="password" type="password" required minLength="10" maxLength="128" autoComplete={auth==='register'?'new-password':'current-password'}/></label><p className="form-note">Пароль — не менее 10 символов. Подтверждение email и восстановление пароля не подключены.</p>{formError&&<p className="form-error" role="alert">{formError}</p>}<button className="primary full" disabled={busy}>{busy?'Подождите…':auth==='register'?'Создать аккаунт':'Войти'}</button></form><p className="auth-switch"><button disabled={busy} onClick={()=>login(auth==='register'?'login':'register')}>{auth==='register'?'Уже есть аккаунт? Войти':'Создать аккаунт'}</button></p></Dialog>}
+    {editor&&<Dialog title={editor.preview?'Отправить изменение на модерацию':`${operations[action.operation]} · ${names[action.entity]}`} locked={busy} onClose={()=>setEditor(null)}>
+      {editor.preview?<><p className="dialog-description">Предварительный расчёт. Общая карта изменится только после одобрения модератора.</p><MetricsPanel before={editor.preview.before} after={editor.preview.after} compact/><CityMap state={editor.preview.state} metrics={editor.preview.after} relocation={action.entity==='object'&&action.operation==='update'?{before:city.state.objects.find(o=>o.id===action.id),after:editor.preview.state.objects.find(o=>o.id===action.id)}:null} mode="inspect" selectedHome={home} setSelectedHome={focusHome} focusRequest={focusRequest} compact/><form onSubmit={submit}><label className="field">Обоснование изменения<textarea required minLength="10" maxLength="1000" rows="3" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Почему это нужно району?"/></label>{formError&&<p className="form-error" role="alert">{formError}</p>}<div className="form-actions"><button className="secondary" type="button" disabled={busy} onClick={()=>setEditor(current=>({...current,preview:null}))}>Назад</button><button className="primary" disabled={busy||reason.trim().length<10}>Отправить на модерацию</button></div></form></>:<form onSubmit={previewChange}>
+        {action.operation==='delete'?<p className="dialog-description">Подать заявку на снос или удаление существующего объекта «{city.state.objects.find(o=>o.id===action.id)?.name||action.id}»? Сначала покажем влияние на метрики. До одобрения модератора объект останется на карте.</p>:<div>
+          {action.entity==='object'&&action.operation==='update'&&<p className="readonly-note">Перенос остановки «{city.state.objects.find(o=>o.id===action.id)?.name}» в выбранную точку. Изменятся привязка к пешеходной сети и маршруты. Остановка переместится после одобрения модератора.</p>}
+          {action.entity==='object'&&action.operation==='add'&&<><p className="readonly-note">Место выбрано на карте. Можно предложить новую остановку или зелёную зону. Строительство и перемещение зданий недоступны.</p><label className="field">Название<input required value={values.name||''} maxLength="80" onChange={e=>updateField('name',e.target.value)}/></label><label className="field">Тип<select value={values.kind} onChange={e=>updateField('kind',e.target.value)}><option value="park">Зелёная зона</option><option value="stop">Остановка</option></select></label></>}
+          {action.entity==='edge'&&<p className="readonly-note">Предложение: {values.closed?'перекрыть пешеходный участок':'восстановить пешеходный участок'}. Изменять узлы, геометрию и нагрузку дорожки житель не может.</p>}
+        </div>}{formError&&<p className="form-error" role="alert">{formError}</p>}<div className="form-actions"><button className="secondary" type="button" disabled={busy} onClick={()=>setEditor(null)}>Отмена</button><button className="primary" disabled={busy}>{busy?'Считаем…':'Рассчитать до / после →'}</button></div></form>}
+    </Dialog>}
+    {review&&<Dialog title="Решение модератора" locked={busy} onClose={()=>setReview(null)}><h3>{operations[review.action.operation]}: {review.target_name||title(review.action)}</h3><blockquote>{review.reason}</blockquote>{reviewPreview&&<><MetricsPanel before={reviewPreview.before} after={reviewPreview.after} compact/><CityMap state={reviewPreview.state} metrics={reviewPreview.after} relocation={review.action.entity==='object'&&review.action.operation==='update'?{before:city.state.objects.find(o=>o.id===review.action.id),after:reviewPreview.state.objects.find(o=>o.id===review.action.id)}:null} mode="inspect" selectedHome={home} setSelectedHome={focusHome} focusRequest={focusRequest} compact/></>}{formError&&<p className="form-error" role="alert">{formError}</p>}{review.author_id===user.id?<p className="form-note">Свою заявку должен рассмотреть другой модератор.</p>:<><label className="field">Обоснование решения<textarea rows="3" minLength="5" maxLength="1000" value={comment} onChange={e=>setComment(e.target.value)}/></label><div className="form-actions"><button className="danger-button" disabled={busy||comment.trim().length<5} onClick={()=>decide('rejected')}>Отклонить и закрыть</button><button className="primary" disabled={busy||!reviewPreview||comment.trim().length<5} onClick={()=>decide('approved')}>Одобрить и закрыть</button></div></>}</Dialog>}
+  </>;
 }

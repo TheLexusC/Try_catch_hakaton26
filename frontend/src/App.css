@@ -1,3 +1,7 @@
+@font-face{font-family:'Montserrat';font-style:normal;font-weight:400;font-display:swap;src:url('./assets/fonts/Montserrat-400.ttf') format('truetype')}
+@font-face{font-family:'Montserrat';font-style:normal;font-weight:500;font-display:swap;src:url('./assets/fonts/Montserrat-500.ttf') format('truetype')}
+@font-face{font-family:'Montserrat';font-style:normal;font-weight:600;font-display:swap;src:url('./assets/fonts/Montserrat-600.ttf') format('truetype')}
+@font-face{font-family:'Montserrat';font-style:normal;font-weight:700;font-display:swap;src:url('./assets/fonts/Montserrat-700.ttf') format('truetype')}
 /* ==========================================================================
    Обнинск 2040 — базовые стили
    ========================================================================== */
@@ -2133,3 +2137,31 @@ blockquote {
     transition: none !important;
   }
 }
+.dialog.narrow{width:min(460px,calc(100vw - 32px))}
+.leaflet-city{height:660px;min-height:500px;background:#e5ecdf;z-index:0}.compact-map .leaflet-city{height:320px;min-height:260px}.leaflet-container{font:12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.leaflet-popup-content{line-height:1.6;max-width:260px}.leaflet-popup-content p{margin:9px 0}.map-proposal-button{background:#edf2e6;color:#416947;border:1px solid #c9d9bd;border-radius:6px;padding:8px 12px;font-size:11px}.map-bottom a{font-size:9px;color:#789368}.object-search{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0}.object-search input{flex:1;min-width:200px;padding:12px 14px;border:1px solid var(--line);border-radius:7px;background:white;font-size:12px}.object-search small{font-size:10px;color:#8e9b7d}.pagination{display:flex;align-items:center;gap:15px;margin-top:15px;font-size:11px;color:#819570}.pagination button{padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:white}.readonly-note{padding:12px 16px;background:#eff4e7;border:1px solid #dbe5cf;border-radius:7px;font-size:11px;line-height:1.7;color:#7d936b;margin-bottom:15px}@media(max-width:760px){.leaflet-city{height:500px;min-height:420px}.compact-map .leaflet-city{height:300px;min-height:260px}}
+
+/* Keep the original blue identity on the current city and moderation screens. */
+.map-panel{min-width:0;display:flex;flex-direction:column;background:#e9eef1}
+.hero-aside .hero-stats{border:0;padding:0}
+.hero h1{font-weight:700}.hero-aside{flex-shrink:0}
+.load-summary,.readonly-note{padding:15px 18px;background:#eef5fa;border:1px solid #d4e4ef;border-radius:8px;margin-top:15px;font-size:12px;line-height:1.7;color:#436c95}
+.load-summary b{color:var(--ink)}
+.table-actions button{background:none;color:#304e6b;font-size:12px;text-decoration:underline;text-underline-offset:3px;margin-right:14px;padding:4px 0}
+.routes-details{margin-top:20px;font-size:13px;color:#4f80b0}.routes-details summary{cursor:pointer}
+.object-search input{font-size:14px}.object-search small,.pagination{color:#4f80b0}
+.danger-button{border:1px solid #dbb6a6;color:#a45740;border-radius:8px;padding:12px 18px;background:#fff;font-size:13px}
+.leaflet-city{background:#e9eef1}.leaflet-container{font-family:'Montserrat',sans-serif}
+.leaflet-container span{color:inherit}.leaflet-popup-content p{font-size:12px;font-weight:500;line-height:1.6}
+.map-proposal-button{background:#edf5fb;color:#25658f;border-color:#cbdfeD;display:block;margin-top:8px}
+.map-proposal-button:hover{background:#dcefff}
+.leaflet-tooltip{font-family:'Montserrat',sans-serif;color:#0b2239;background:#fff;border-color:#ccdbe6}
+.city-label-canvas{position:absolute;pointer-events:none}
+.leaflet-zoom-anim .city-label-canvas{visibility:hidden}
+.map-bottom small{font-size:11px;line-height:1.6}.map-bottom a{color:#446e97;font-size:10px}
+.control-panel select{font-size:12px}.control-panel .field small{display:block;font-size:11px;line-height:1.7;margin-top:9px}
+@media(max-width:1000px){.workspace{grid-template-columns:280px minmax(0,1fr)}.hero-aside{display:none}}
+@media(max-width:760px){.workspace{grid-template-columns:1fr}.hero h1{font-size:36px}.tool small{line-height:1.5}.table-actions{white-space:normal;min-width:145px}}
+
+.map-panel>.leaflet-city{flex:1;min-height:660px}
+.compact-map>.leaflet-city{height:320px;min-height:320px;flex:none}
+@media(max-width:760px){.map-panel>.leaflet-city{min-height:500px}.compact-map>.leaflet-city{min-height:260px;height:280px}}

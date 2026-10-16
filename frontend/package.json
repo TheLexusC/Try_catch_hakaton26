@@ -9,8 +9,7 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "esbuild": "^0.28.2",
-    "fdir": "^6.5.0",
+    "leaflet": "^1.9.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -19,8 +18,5 @@
   },
   "engines": {
     "node": ">=22.0.0"
-  },
-  "allowScripts": {
-    "esbuild@0.25.12": true
   }
 }

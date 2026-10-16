@@ -1,7 +1,8 @@
 import math
 import pytest
-from backend.graph import build_graph, dijkstra, restore_path, nearest_target
-from backend.data import MAP, initial_state, apply_action
+from backend.graph import dijkstra,restore_path
+from backend.demo_seed import seed_state
+from backend.data import apply_action
 from backend.metrics import calculate_metrics
 
 
@@ -10,67 +11,42 @@ def test_dijkstra_indirect_shortest():
     assert d['b']==5 and restore_path(p,'a','b')==['a','c','b']
 
 
-def test_disconnected_and_empty_targets():
-    d,p=dijkstra({'a':{},'b':{}},'a')
-    assert math.isinf(d['b'])
-    assert nearest_target(d,p,'a',['b'])==(None,[])
-    assert nearest_target(d,p,'a',[])==(None,[])
-    assert nearest_target(d,p,'a',['a'])==(0,['a'])
+def test_multisource_agrees_with_independent_per_home_search():
+    s=seed_state();m=calculate_metrics(s);nodes={n['id']:n for n in s['nodes']};g={n:{} for n in nodes}
+    def distance(a,b):return math.hypot(a['x']-b['x'],a['y']-b['y'])
+    anchors={o['id']:min(nodes,key=lambda n:(distance(o,nodes[n]),n)) for o in s['objects']}
+    for e in s['edges']:g[e['a']][e['b']]=g[e['b']][e['a']]=distance(nodes[e['a']],nodes[e['b']])
+    for row in m['rows']:
+        d,_=dijkstra(g,anchors[row['id']])
+        for kind in ['stop','park']:
+            best=min(distance(row,nodes[anchors[row['id']]])+d[anchors[o['id']]]+distance(o,nodes[anchors[o['id']]]) for o in s['objects'] if o['kind']==kind)
+            assert row[kind+'_distance']==round(best,1)
 
 
-def test_parallel_edges_and_closure():
-    nodes=[{'id':'a'},{'id':'b'}]
-    edges=[{'id':'short','a':'a','b':'b','length':4},{'id':'long','a':'a','b':'b','length':9}]
-    assert build_graph(nodes,edges)['a']['b']==4
-    assert build_graph(nodes,edges,['short'])['a']['b']==9
-    assert build_graph(nodes,edges,['short','long'])['a']=={}
+def test_missing_targets_and_population_are_defined():
+    s=seed_state();s['objects']=[o for o in s['objects'] if o['kind']=='home'];m=calculate_metrics(s)
+    assert m['average_stop'] is None and m['park_percent']==0 and m['unreachable_homes']==5
+    s['objects']=[];m=calculate_metrics(s);assert m['home_count']==0 and m['total_residents']==0
 
 
-def test_negative_weight():
-    with pytest.raises(ValueError):dijkstra({'a':{'b':-1},'b':{}},'a')
+@pytest.mark.parametrize('action',[
+ dict(entity='object',operation='update',id='h1',values={'x':50}),
+ dict(entity='object',operation='add',id='fake',values={'name':'Fake','kind':'home','x':50,'y':50}),
+ dict(entity='node',operation='delete',id='n1',values={}),
+ dict(entity='edge',operation='update',id='e1',values={'capacity':100}),
+])
+def test_immutable_buildings_and_network(action):
+    with pytest.raises(PermissionError):apply_action(seed_state(),action)
 
 
-def test_osm_graph_connected_and_valid():
-    ids={n['id'] for n in MAP['nodes']}
-    assert len(ids)>=10 and len(MAP['homes'])==5
-    assert all(e['a'] in ids and e['b'] in ids and e['length']>0 for e in MAP['edges'])
-    d,_=dijkstra(build_graph(MAP['nodes'],MAP['edges']),MAP['homes'][0]['node'])
-    assert all(math.isfinite(v) for v in d.values())
-    assert any(b['address']=='улица Курчатова, 17' for b in MAP['buildings'])
-    assert MAP['source']['license']=='ODbL 1.0'
+def test_demolition_requires_existing_target_and_is_pure():
+    original=seed_state();changed=apply_action(original,dict(entity='object',operation='delete',id='h1',values={}))
+    assert len(changed['objects'])==len(original['objects'])-1
+    assert calculate_metrics(changed)['total_residents']==720
+    with pytest.raises(ValueError):apply_action(changed,dict(entity='object',operation='delete',id='h1',values={}))
 
 
-def test_isolated_home():
-    s=initial_state();h=MAP['homes'][0]
-    s['closed_edges']=[e['id'] for e in MAP['edges'] if h['node'] in (e['a'],e['b'])]
-    m=calculate_metrics(s)
-    assert m['rows'][0]['stop_distance'] is None and not m['rows'][0]['park_access']
-    assert m['unreachable_homes']==1 and m['total_residents']==900
-    assert m['average_stop']==round(sum(r['stop_distance'] for r in m['rows'][1:])/4,1)
-
-
-def test_no_targets():
-    s=initial_state();s['facilities']=[];m=calculate_metrics(s)
-    assert m['average_stop'] is None and m['unreachable_homes']==5 and m['park_percent']==0
-
-
-def test_pure_park_addition():
-    s=initial_state();after=apply_action(s,{'type':'add_park','target_id':MAP['homes'][0]['node']})
-    assert len(after['facilities'])==len(s['facilities'])+1
-    assert calculate_metrics(after)['rows'][0]['park_distance']==0
-    assert after['version']==s['version']
-
-
-def test_round_trip():
-    s=initial_state();e=MAP['edges'][0]['id']
-    closed=apply_action(s,{'type':'close_edge','target_id':e})
-    opened=apply_action(closed,{'type':'open_edge','target_id':e})
+def test_road_closure_and_reopening_restores_metrics():
+    s=seed_state();closed=apply_action(s,dict(entity='edge',operation='update',id='e1',values={'closed':True}))
+    opened=apply_action(closed,dict(entity='edge',operation='update',id='e1',values={'closed':False}))
     assert calculate_metrics(opened)==calculate_metrics(s)
-
-
-def test_exact_radius(monkeypatch):
-    import backend.metrics as module
-    tiny={'nodes':[{'id':'h'},{'id':'p'}],'edges':[{'id':'e','a':'h','b':'p','length':500.04}], 'homes':[{'id':'home','node':'h','residents':10}]}
-    monkeypatch.setattr(module,'MAP',tiny)
-    result=module.calculate_metrics({'closed_edges':[],'facilities':[{'node':'p','kind':'park'}]})
-    assert result['rows'][0]['park_distance']==500.0 and result['park_percent']==0
