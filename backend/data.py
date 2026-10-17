@@ -6,7 +6,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from dotenv import load_dotenv
-from .seed import DISTRICT,seed_state
+from .seed import DISTRICT,seed_state,amenities_objects
 from .geo import NodeIndex, unproject
 from math import hypot
 ROOT=Path(__file__).resolve().parents[1]
@@ -38,6 +38,22 @@ def initialize(dsn=DATABASE):
                 values=[(o['residents'],o['id'],DISTRICT) for o in seed_state()['objects'] if o['kind']=='home']
                 with db.cursor() as cursor:cursor.executemany("UPDATE objects SET residents=%s WHERE id=%s AND district_id=%s AND kind='home' AND source='osm'",values)
                 db.execute('UPDATE districts SET population_model_version=1 WHERE id=%s',(DISTRICT,))
+            install_amenities(db)
+
+
+def install_amenities(db):
+    """One-time additive migration: never reset proposals, homes or later removals."""
+    row=db.execute('SELECT amenities_model_version FROM districts WHERE id=%s FOR UPDATE',(DISTRICT,)).fetchone()
+    if row['amenities_model_version']>=1:return 0
+    nodes=[dict(r) for r in db.execute('SELECT id,x,y FROM nodes WHERE district_id=%s',(DISTRICT,)).fetchall()]
+    fields=('id','name','kind','x','y','residents','capacity','load','geom','source','node_id','approach')
+    added=0
+    for obj in amenities_objects(nodes):
+        result=db.execute(f'INSERT INTO objects(district_id,{",".join(fields)}) VALUES({",".join(["%s"]*(len(fields)+1))}) ON CONFLICT DO NOTHING',
+            (DISTRICT,*(Jsonb(obj[k]) if k=='geom' and obj[k] is not None else obj[k] for k in fields)))
+        added+=result.rowcount
+    db.execute('UPDATE districts SET amenities_model_version=1,version=version+%s WHERE id=%s',(int(added>0),DISTRICT))
+    return added
 
 
 def migrate_legacy_users(db):
@@ -113,7 +129,7 @@ def apply_action(state,action):
         if values:raise ValueError('Для заявки на снос не передавайте новые параметры')
         if not any(o['id']==target for o in state['objects']):raise ValueError('Нельзя предложить снос несуществующего объекта')
         deleted=next(o for o in state['objects'] if o['id']==target)
-        if deleted.get('geom') and deleted['kind']!='park':result['demolished']=[*state.get('demolished',[]),{k:deleted[k] for k in ('id','name','geom')}]
+        if deleted.get('geom') and deleted['kind'] not in {'park','parking','greenery'}:result['demolished']=[*state.get('demolished',[]),{k:deleted[k] for k in ('id','name','geom')}]
         result['objects']=[o for o in state['objects'] if o['id']!=target]
     elif entity=='object' and op=='update':
         obj=next((o for o in state['objects'] if o['id']==target),None)

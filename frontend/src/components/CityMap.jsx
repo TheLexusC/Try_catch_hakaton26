@@ -37,6 +37,10 @@ const colors = {
 export default function CityMap(props) {
   const { state, metrics, mode, selectedHome, compact = false } = props;
   
+  const layerNames = {home:'Жилые дома',building:'Другие здания',stop:'Остановки',park:'Парки',greenery:'Озеленённые зоны',parking:'Парковки',school:'Школы',clinic:'Поликлиники',shop:'Магазины',areas:'Районы',roads:'Проектные дороги и перекрытия'};
+  const [visibleLayers,setVisibleLayers] = useState(()=>Object.fromEntries(Object.keys(layerNames).map(k=>[k,true])));
+  const visibleLayersRef=useRef(visibleLayers);
+  visibleLayersRef.current=visibleLayers;
   const [full, setFull] = useState(false);
   const [placement, setPlacement] = useState(null);
   
@@ -83,7 +87,7 @@ export default function CityMap(props) {
     
     const labels = addMapLabels(
       instance, 
-      () => latest.current.state.objects, 
+      () => latest.current.state.objects.filter(o=>visibleLayersRef.current[o.kind]!==false),
       () => layers.current.roadsData, 
       () => latest.current.selectedHome
     );
@@ -210,7 +214,7 @@ export default function CityMap(props) {
           const button = document.createElement('button');
           button.className = 'map-proposal-button';
           button.disabled = obj.demolition?.allowed === false;
-          button.textContent = button.disabled ? 'Снос запрещён по цене' : (obj.geom && obj.kind !== 'park' ? 'Предложить снос' : 'Предложить удаление');
+          button.textContent = button.disabled ? 'Снос запрещён по цене' : (obj.demolition ? 'Предложить снос' : 'Предложить удаление');
           button.onclick = () => {
             instance.closePopup();
             latest.current.onSelect('object', obj);
@@ -233,7 +237,9 @@ export default function CityMap(props) {
       });
     };
     
+    instance.closePopup();
     for (const obj of state.objects) {
+      if(visibleLayers[obj.kind]===false)continue;
       const style = {
         dashArray: obj.source === 'proposal' && obj.kind === 'home' ? '5 3' : undefined,
         color: obj.id === selectedHome ? '#177ebc' : colors[obj.kind],
@@ -242,14 +248,16 @@ export default function CityMap(props) {
         fillOpacity: obj.kind === 'park' ? 0.35 : 0.65
       };
       
-      if (obj.geom) {
+      if (['parking', 'greenery'].includes(obj.kind)) {
+        popup(L.circleMarker(latlng(obj), { ...style, radius: 6, weight: 2, color: obj.kind === 'parking' ? '#4c5ca6' : '#25804c', fillOpacity: .9 }).addTo(group), obj);
+      } else if (obj.geom) {
         L.geoJSON({ type: 'Feature', properties: { id: obj.id }, geometry: obj.geom }, { style, onEachFeature: (_, layer) => popup(layer, obj) }).addTo(group);
       } else {
         popup(L.circleMarker(latlng(obj), { ...style, radius: obj.kind === 'stop' ? 5 : 7 }).addTo(group), obj);
       }
     }
     
-    for (const obj of state.demolished || []) {
+    for (const obj of visibleLayers.building || visibleLayers.home ? state.demolished || [] : []) {
       L.geoJSON(obj.geom, {
         interactive: false,
         style: { color: '#c65248', weight: 2, dashArray: '5 4', fillColor: '#fff5eb', fillOpacity: 0.85 }
@@ -257,7 +265,7 @@ export default function CityMap(props) {
     }
     
     layers.current.labels?.refresh();
-  }, [state.objects, state.demolished, selectedHome]);
+  }, [state.objects, state.demolished, selectedHome, visibleLayers]);
 
   useEffect(()=>{
     const instance=map.current;if(!instance)return;
@@ -265,7 +273,7 @@ export default function CityMap(props) {
     const routes=L.layerGroup().addTo(instance),roads=L.layerGroup().addTo(instance);layers.current.routes=routes;layers.current.edges=roads;
     const nodes=Object.fromEntries(state.nodes.map(n=>[n.id,n]));
     const edges=new Map(state.edges.map(e=>[[e.a,e.b].sort().join('|'),e]));
-    for(const edge of state.edges){
+    for(const edge of visibleLayers.roads ? state.edges : []){
       const proposed=edge.id.includes('_e');if(mode!=='edge'&&!edge.closed&&!proposed)continue;
       const points=edge.geom?edge.geom.coordinates.map(([lon,lat])=>[lat,lon]):[latlng(nodes[edge.a]),latlng(nodes[edge.b])];
       const line=L.polyline(points,{color:edge.closed?'#bf594e':proposed?'#0075c6':'#7b9c87',weight:mode==='edge'?5:4,opacity:edge.closed?1:.5,dashArray:edge.closed?'7 5':undefined}).addTo(roads);
@@ -275,6 +283,7 @@ export default function CityMap(props) {
     const row=metrics.rows.find(h=>h.id===selectedHome);
     if(!row)return;
     for(const kind of ['stop','park']){
+      if(!visibleLayers.home || !visibleLayers[kind])continue;
       const direct=row[kind+'_route'];if(direct?.length){L.polyline(direct.map(([lon,lat])=>[lat,lon]),{color:kind==='stop'?'#c98d25':'#28835c',weight:4,opacity:.95,dashArray:kind==='park'?'7 5':undefined,interactive:false}).addTo(routes);continue;}
       const path=row[kind+'_path'],target=state.objects.find(o=>o.id===row[kind+'_target']);if(!target||!path.length)continue;
       const points=[latlng(row),latlng(nodes[path[0]])];
@@ -285,7 +294,7 @@ export default function CityMap(props) {
       }
       points.push(latlng(target));L.polyline(points,{color:kind==='stop'?'#c98d25':'#28835c',weight:4,opacity:.95,dashArray:kind==='park'?'7 5':undefined,interactive:false}).addTo(routes);
     }
-  },[state,metrics,selectedHome,mode]);
+  },[state,metrics,selectedHome,mode,visibleLayers]);
   useEffect(()=>{
     const instance=map.current;if(!instance)return;
     if(layers.current.relocation)instance.removeLayer(layers.current.relocation);
@@ -315,8 +324,8 @@ export default function CityMap(props) {
     const instance=map.current;if(!instance)return;
     if(layers.current.areas)instance.removeLayer(layers.current.areas);
     const group=L.layerGroup().addTo(instance);layers.current.areas=group;
-    for(const area of state.areas||[]){const layer=L.geoJSON(area.geom,{interactive:false,style:{color:'#147dcc',weight:2,dashArray:'9 5',fillColor:'#42b3ff',fillOpacity:.09}}).addTo(group);layer.bindTooltip(area.name,{permanent:true,direction:'center',className:'area-map-label'});}
-  },[state.areas]);
+    for(const area of visibleLayers.areas ? state.areas||[] : []){const layer=L.geoJSON(area.geom,{interactive:false,style:{color:'#147dcc',weight:2,dashArray:'9 5',fillColor:'#42b3ff',fillOpacity:.09}}).addTo(group);layer.bindTooltip(area.name,{permanent:true,direction:'center',className:'area-map-label'});}
+  },[state.areas,visibleLayers.areas]);
   useEffect(()=>{const obj=state.objects.find(o=>o.id===props.focusObject?.id);if(obj)map.current?.flyTo(latlng(obj),17,{duration:.4});},[props.focusObject]);
   useEffect(()=>{
     if(!placing||compact)return;
@@ -330,19 +339,19 @@ export default function CityMap(props) {
   useEffect(()=>{
     if(layers.current.sketch)map.current?.removeLayer(layers.current.sketch);
     const group=L.layerGroup().addTo(map.current);layers.current.sketch=group;
-    for(const path of props.sketchPaths||[])if(path.points.length>1)L.polyline(path.points.map(latlng),{color:'#0075c6',weight:4,dashArray:'6 4',interactive:false}).addTo(group);
+    for(const path of visibleLayers.roads ? props.sketchPaths||[] : [])if(path.points.length>1)L.polyline(path.points.map(latlng),{color:'#0075c6',weight:4,dashArray:'6 4',interactive:false}).addTo(group);
     const points=props.drawPoints||[];
     if(points.length>1){const factory=mode==='draw_polygon'?L.polygon:L.polyline;factory(points.map(latlng),{color:'#0075c6',weight:3,fillOpacity:.14,interactive:false}).addTo(group);}
     for(const point of points)L.circleMarker(latlng(point),{radius:5,color:'#006fab',fillOpacity:1,interactive:false}).addTo(group);
-  },[props.drawPoints,props.sketchPaths,mode]);
+  },[props.drawPoints,props.sketchPaths,mode,visibleLayers.roads]);
   useEffect(()=>{
     if(layers.current.draftHomes)map.current?.removeLayer(layers.current.draftHomes);
     const group=L.layerGroup().addTo(map.current);layers.current.draftHomes=group;
-    for(const obj of state.objects.filter(o=>['home','stop'].includes(o.kind)&&(o.source==='proposal'||(state.draft_ids||[]).includes(o.id)))){
+    for(const obj of state.objects.filter(o=>visibleLayers[o.kind]!==false&&['home','stop'].includes(o.kind)&&(o.source==='proposal'||(state.draft_ids||[]).includes(o.id)))){
       if(obj.geom)L.geoJSON(obj.geom,{interactive:false,style:{color:'#0066b0',weight:3,fillColor:'#42b3ff',fillOpacity:.75}}).addTo(group);
       L.circleMarker(latlng(obj),{radius:5,color:'#0066b0',fillColor:obj.kind==='stop'?'#e8ba46':'white',fillOpacity:1,weight:2,interactive:false}).bindTooltip(obj.name,{permanent:true,direction:'top',className:'draft-home-label'}).addTo(group);
     }
-  },[state.objects,state.draft_ids]);
+  },[state.objects,state.draft_ids,visibleLayers]);
   useEffect(()=>{
     if(props.focusBoundary?.length>=3)map.current?.fitBounds(L.latLngBounds(props.focusBoundary.map(latlng)),{padding:[45,45],maxZoom:17,animate:false});
   },[props.focusBoundary]);
@@ -364,6 +373,17 @@ export default function CityMap(props) {
         </button>
       </div>
       
+      {!compact && <details className="map-layer-filters">
+        <summary>Слои карты · показано {Object.values(visibleLayers).filter(Boolean).length} из {Object.keys(layerNames).length}</summary>
+        <div className="layer-filter-options" role="group" aria-label="Фильтры объектов карты">
+          {Object.entries(layerNames).map(([kind,label])=><label key={kind}>
+            <input type="checkbox" checked={visibleLayers[kind]} onChange={e=>setVisibleLayers(current=>({...current,[kind]:e.target.checked}))}/>
+            <i className="layer-color" style={{background:colors[kind]||'#147dcc'}}/>{label}
+          </label>)}
+        </div>
+        <div className="layer-filter-actions"><button type="button" className="text-button" onClick={()=>setVisibleLayers(Object.fromEntries(Object.keys(layerNames).map(k=>[k,true])))}>Показать все слои</button><button type="button" className="text-button" onClick={()=>setVisibleLayers(Object.fromEntries(Object.keys(layerNames).map(k=>[k,false])))}>Скрыть все слои</button></div>
+        <p>Фильтры скрывают объекты и их подписи. Фоновая карта и расчёт показателей сохраняются.</p>
+      </details>}
       {placing && !compact && (
         <div className="placement-banner" role="status">
           <strong>

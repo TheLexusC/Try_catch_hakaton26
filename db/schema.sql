@@ -57,7 +57,7 @@ ALTER TABLE nodes ADD CONSTRAINT nodes_check CHECK(x BETWEEN 0 AND 20000 AND y B
 ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_check;
 ALTER TABLE objects ADD CONSTRAINT objects_check CHECK(x BETWEEN 0 AND 20000 AND y BETWEEN 0 AND 20000);
 ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_kind_check;
-ALTER TABLE objects ADD CONSTRAINT objects_kind_check CHECK(kind IN ('home','building','stop','park','school','clinic','shop'));
+ALTER TABLE objects ADD CONSTRAINT objects_kind_check CHECK(kind IN ('home','building','stop','park','school','clinic','shop','parking','greenery'));
 ALTER TABLE objects ADD COLUMN IF NOT EXISTS geom jsonb;
 ALTER TABLE objects ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'proposal';
 ALTER TABLE objects ADD COLUMN IF NOT EXISTS node_id text;
@@ -115,3 +115,5 @@ CREATE TABLE IF NOT EXISTS demo_backups (
 ALTER TABLE districts ADD COLUMN IF NOT EXISTS population_model_version integer NOT NULL DEFAULT 0;
 
 ALTER TABLE districts ADD COLUMN IF NOT EXISTS work_limits jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE districts ADD COLUMN IF NOT EXISTS amenities_model_version integer NOT NULL DEFAULT 0;

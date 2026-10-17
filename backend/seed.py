@@ -13,4 +13,17 @@ def seed_state():
         remaining=133000-sum(floor(value) for _,value in weighted)
         extras={h['id'] for h,value in sorted(weighted,key=lambda item:(-(item[1]-floor(item[1])),item[0]['id']))[:remaining]}
         for home,value in weighted:home['residents']=floor(value)+(home['id'] in extras)
+    state['objects'].extend(amenities_objects(state['nodes']))
     return state
+
+
+def amenities_objects(nodes):
+    """Offline OSM facilities; anchors are rebuilt for the active walking network."""
+    from .geo import NodeIndex
+    with gzip.open(Path(__file__).resolve().parents[1]/'db/obninsk.amenities.json.gz','rt',encoding='utf8') as file:
+        objects=json.load(file)['objects']
+    index=NodeIndex(nodes)
+    for obj in objects:
+        anchor,distance=index.nearest(obj['x'],obj['y'])
+        obj.update(node_id=anchor,approach=round(distance,2))
+    return objects

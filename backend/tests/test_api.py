@@ -635,3 +635,21 @@ def test_work_limits_persist_sum_by_type_and_apply_on_approval(env):
     for limits in ({'oops':5},{'add_park':-1},{'add_park':True},{'add_park':1.5}):
         assert mod.post('/api/work-limits',json={'limits':limits}).status_code==422
     mod.close()
+
+
+def test_facility_import_is_additive_and_runs_only_once(env,monkeypatch):
+    from backend.data import install_amenities
+    from backend.seed import DISTRICT
+    app,c,dsn=env;register(c);pid=proposal(c).json()['id']
+    before=c.get('/api/city').json()['state']
+    obj=dict(before['objects'][0],id='osm_parking_wtest',name='Парковка',kind='parking',residents=0,geom=None,source='osm')
+    monkeypatch.setattr('backend.data.amenities_objects',lambda nodes:[obj])
+    with connect(dsn) as db:assert install_amenities(db)==1
+    after=c.get('/api/city').json()['state']
+    assert len(after['objects'])==len(before['objects'])+1
+    assert after['demolition_policy']==before['demolition_policy']
+    assert c.get('/api/proposals').json()['items'][0]['id']==pid
+    with connect(dsn) as db:
+        db.execute('DELETE FROM objects WHERE id=%s',(obj['id'],))
+        assert install_amenities(db)==0
+    assert len(c.get('/api/city').json()['state']['objects'])==len(before['objects'])
