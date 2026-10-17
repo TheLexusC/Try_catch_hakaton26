@@ -128,7 +128,7 @@ export default function CityMap(props) {
     
     const placeClick = e => {
       const current = latest.current;
-      if (current.compact || current.busy || !['add_home', 'add_area', 'add_stop', 'add_object', 'draw_polygon', 'draw_road'].includes(current.mode) || e.button !== 0 || e.target.closest('.leaflet-control,.leaflet-popup,.leaflet-tooltip')) return;
+      if (current.compact || current.readOnly || current.busy || !['add_home', 'add_area', 'add_stop', 'add_object', 'draw_polygon', 'draw_road'].includes(current.mode) || e.button !== 0 || e.target.closest('.leaflet-control,.leaflet-popup,.leaflet-tooltip')) return;
       if (pointerStart && Math.hypot(e.clientX - pointerStart.x, e.clientY - pointerStart.y) > 6) return;
       
       e.preventDefault();
@@ -146,7 +146,7 @@ export default function CityMap(props) {
     
     instance.on('click', e => {
       const current = latest.current;
-      if (!current.compact && ['add_object', 'add_home', 'add_area', 'add_stop', 'draw_polygon', 'draw_road', 'move_stop'].includes(current.mode)) {
+      if (!current.compact && !current.readOnly && ['add_object', 'add_home', 'add_area', 'add_stop', 'draw_polygon', 'draw_road', 'move_stop'].includes(current.mode)) {
         current.onPlace(xy(e.latlng));
       }
     });
@@ -181,13 +181,13 @@ export default function CityMap(props) {
       layer.on('click', event => {
         const current = latest.current;
         
-        if (!current.compact && ['add_object', 'add_home', 'add_area', 'add_stop', 'draw_polygon', 'draw_road', 'move_stop'].includes(current.mode)) {
+        if (!current.compact && !current.readOnly && ['add_object', 'add_home', 'add_area', 'add_stop', 'draw_polygon', 'draw_road', 'move_stop'].includes(current.mode)) {
           if (current.mode === 'move_stop' && obj.kind === 'stop') current.onMoveStop(obj);
           else current.onPlace(xy(event.latlng || L.latLng(latlng(obj))));
           return;
         }
         
-        if (current.mode === 'delete' && !current.compact && obj.demolition?.allowed !== false) {
+        if (current.mode === 'delete' && !current.compact && !current.readOnly && obj.demolition?.allowed !== false) {
           current.onSelect('object', obj);
           return;
         }
@@ -210,7 +210,7 @@ export default function CityMap(props) {
           box.append(cost);
         }
         
-        if (!current.compact) {
+        if (!current.compact && !current.readOnly) {
           const button = document.createElement('button');
           button.className = 'map-proposal-button';
           button.disabled = obj.demolition?.allowed === false;
@@ -240,11 +240,12 @@ export default function CityMap(props) {
     instance.closePopup();
     for (const obj of state.objects) {
       if(visibleLayers[obj.kind]===false)continue;
+      const highlighted=props.highlightIds?.includes(obj.id);
       const style = {
         dashArray: obj.source === 'proposal' && obj.kind === 'home' ? '5 3' : undefined,
-        color: obj.id === selectedHome ? '#177ebc' : colors[obj.kind],
-        weight: obj.id === selectedHome ? 2.5 : 1,
-        fillColor: obj.id === selectedHome ? '#42b3ff' : colors[obj.kind],
+        color: highlighted ? props.highlightColor : obj.id === selectedHome ? '#177ebc' : colors[obj.kind],
+        weight: highlighted ? 3 : obj.id === selectedHome ? 2.5 : 1,
+        fillColor: highlighted ? props.highlightColor : obj.id === selectedHome ? '#42b3ff' : colors[obj.kind],
         fillOpacity: obj.kind === 'park' ? 0.35 : 0.65
       };
       
@@ -265,7 +266,7 @@ export default function CityMap(props) {
     }
     
     layers.current.labels?.refresh();
-  }, [state.objects, state.demolished, selectedHome, visibleLayers]);
+  }, [state.objects, state.demolished, selectedHome, visibleLayers,props.highlightIds,props.highlightColor,props.readOnly]);
 
   useEffect(()=>{
     const instance=map.current;if(!instance)return;
@@ -278,7 +279,7 @@ export default function CityMap(props) {
       const points=edge.geom?edge.geom.coordinates.map(([lon,lat])=>[lat,lon]):[latlng(nodes[edge.a]),latlng(nodes[edge.b])];
       const line=L.polyline(points,{color:edge.closed?'#bf594e':proposed?'#0075c6':'#7b9c87',weight:mode==='edge'?5:4,opacity:edge.closed?1:.5,dashArray:edge.closed?'7 5':undefined}).addTo(roads);
       line.bindTooltip(`${edge.closed?'Перекрыта':'Открыта'} · ${Math.round(edge.length||0)} м`);
-      if(!compact)line.on('click',event=>{const current=latest.current;if(['add_home','add_area','add_stop','add_object','move_stop'].includes(current.mode))current.onPlace(xy(event.latlng));else if(current.mode==='edge')current.onSelect('edge',edge);});
+      if(!compact && !props.readOnly)line.on('click',event=>{const current=latest.current;if(['add_home','add_area','add_stop','add_object','move_stop'].includes(current.mode))current.onPlace(xy(event.latlng));else if(current.mode==='edge')current.onSelect('edge',edge);});
     }
     const row=metrics.rows.find(h=>h.id===selectedHome);
     if(!row)return;
@@ -355,6 +356,18 @@ export default function CityMap(props) {
   useEffect(()=>{
     if(props.focusBoundary?.length>=3)map.current?.fitBounds(L.latLngBounds(props.focusBoundary.map(latlng)),{padding:[45,45],maxZoom:17,animate:false});
   },[props.focusBoundary]);
+  useEffect(()=>{
+    const instance=map.current;if(!instance)return;
+    if(layers.current.strategy)instance.removeLayer(layers.current.strategy);
+    if(!props.strategyFeatures?.length)return;
+    const group=L.geoJSON({type:'FeatureCollection',features:props.strategyFeatures},{style:{color:props.highlightColor||'#197bc0',weight:7,opacity:.8,dashArray:'10 6'},pointToLayer:(_,point)=>L.circleMarker(point,{radius:10,color:props.highlightColor||'#197bc0',fillOpacity:.6}),onEachFeature:(feature,layer)=>layer.bindTooltip(feature.properties.planTitle+' · ориентир, границы работ не указаны')}).addTo(instance);
+    layers.current.strategy=group;
+    const bounds=group.getBounds();
+    for(const obj of state.objects)if(props.highlightIds?.includes(obj.id)){
+      if(obj.geom)bounds.extend(L.geoJSON(obj.geom).getBounds());else bounds.extend(latlng(obj));
+    }
+    if(bounds.isValid())instance.fitBounds(bounds,{padding:[35,35],maxZoom:15,animate:false});
+  },[props.strategyFeatures,props.highlightColor,props.highlightIds]);
   const previous=useRef();
   useEffect(()=>{if(previous.current&&(previous.current!==selectedHome||props.focusRequest)){const home=state.objects.find(o=>o.id===selectedHome);if(home)map.current?.flyTo(latlng(home),17,{duration:.45});}previous.current=selectedHome;},[selectedHome,props.focusRequest]);
   useEffect(() => {
@@ -365,7 +378,7 @@ export default function CityMap(props) {
     <div className={`map-panel ${compact ? 'compact-map ' : ''}${full ? 'map-fullscreen ' : ''}${placing && !compact ? 'placing-object' : ''}`}>
       <div className="map-top">
         <div>
-          <span className="map-status">{compact ? 'ПРЕДПРОСМОТР' : 'КАРТА ГОРОДА'}</span>
+          <span className="map-status">{props.readOnly ? 'СТРАТЕГИЯ · ТОЛЬКО ПРОСМОТР' : compact ? 'ПРЕДПРОСМОТР' : 'КАРТА ГОРОДА'}</span>
           <strong>Обнинск</strong>
         </div>
         <button type="button" className="secondary small" aria-label={full ? 'Закрыть полноэкранную карту' : 'Открыть карту на весь экран'} onClick={() => setFull(v => !v)}>

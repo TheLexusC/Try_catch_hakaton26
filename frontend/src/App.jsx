@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState, useId } from 'react';
 import { newId } from './ids.js';
 import logo from './components/2040_transparent.svg';
 import DistrictBuilder from './components/DistrictBuilder.jsx';
+import StrategyView from './components/StrategyView.jsx';
 import CityMap, { kinds } from './components/CityMap.jsx';
 import AnalyticsPanel, { radiusMetrics, ParkTable } from './components/AnalyticsPanel.jsx';
 import ScenarioWorkbench from './components/ScenarioWorkbench.jsx';
@@ -340,6 +341,7 @@ export default function App() {
           <span>ОБНИНСК <b>2040</b><small>КОНСТРУКТОР ГОРОДА</small></span>
         </a>
         <nav aria-label="Навигация">
+          <button className={tab === 'strategy' ? 'nav-active' : ''} onClick={()=>setTab('strategy')}>Стратегия по годам</button>
           <button className={tab === 'map' ? 'nav-active' : ''} onClick={() => setTab('map')}>Карта города</button>
           <button className={tab === 'requests' ? 'nav-active' : ''} onClick={() => { setTab('requests'); if (user) loadRequests().catch(e => setError(e.message)); }}>
             {canModerate ? 'Модерация' : 'Мои заявки'} {pending > 0 && <span className="count">{pending}</span>}
@@ -362,7 +364,7 @@ export default function App() {
       <main>
         {error && <div className="banner error" role="alert">{error}<button aria-label="Скрыть ошибку" onClick={() => setError('')}>×</button></div>}
         {notice && <div className="banner success" role="status">{notice}<button aria-label="Скрыть уведомление" onClick={() => setNotice('')}>×</button></div>}
-        {tab === 'map' ? (
+        {tab === 'strategy' ? (city ? <StrategyView city={city}/> : <div className="empty-state">Загружаем карту стратегии…</div>) : tab === 'map' ? (
           <>
             <section className="hero">
               <div>
