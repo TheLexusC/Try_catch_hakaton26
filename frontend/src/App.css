@@ -2195,3 +2195,4 @@ blockquote {
 .editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.district-count{padding:10px 14px;background:#e6f3fc;border-radius:6px;color:#235c85}.district-builder .editor-grid .field{margin-bottom:5px}@media(max-width:700px){.editor-grid{grid-template-columns:1fr}}
 
 .metrics-scope-title{margin:24px 0 14px;font:600 17px Montserrat,sans-serif}
+.district-navigation{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 16px;padding:14px;background:#edf6fd;border:1px solid #c6dfef;border-radius:8px}.district-navigation p{width:100%;font-size:12px;line-height:1.6;color:#486b85}.map-drawing-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%}.map-drawing-error{width:100%;padding:9px 12px;background:#fff0ed;color:#9d3b29;font-size:12px;border-radius:5px}

@@ -56,7 +56,7 @@ export default function CityMap(props) {
     document.body.style.overflow = 'hidden';
     
     const escape = (e) => {
-      if (e.key === 'Escape') setFull(false);
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setFull(false); }
     };
     
     window.addEventListener('keydown', escape);
@@ -124,7 +124,7 @@ export default function CityMap(props) {
     
     const placeClick = e => {
       const current = latest.current;
-      if (current.compact || !['add_home', 'add_area', 'add_stop', 'add_object', 'draw_polygon', 'draw_road'].includes(current.mode) || e.button !== 0 || e.target.closest('.leaflet-control,.leaflet-popup,.leaflet-tooltip')) return;
+      if (current.compact || current.busy || !['add_home', 'add_area', 'add_stop', 'add_object', 'draw_polygon', 'draw_road'].includes(current.mode) || e.button !== 0 || e.target.closest('.leaflet-control,.leaflet-popup,.leaflet-tooltip')) return;
       if (pointerStart && Math.hypot(e.clientX - pointerStart.x, e.clientY - pointerStart.y) > 6) return;
       
       e.preventDefault();
@@ -259,11 +259,91 @@ export default function CityMap(props) {
     layers.current.labels?.refresh();
   }, [state.objects, state.demolished, selectedHome]);
 
-  // Остальные useEffect хуки (маршруты, релокация, зоны, скетчи и границы) оставлены аналогично оригинальной логике, 
-  // но с добавлением переносов строк для читаемости.
-  
+  useEffect(()=>{
+    const instance=map.current;if(!instance)return;
+    for(const key of ['routes','edges'])if(layers.current[key])instance.removeLayer(layers.current[key]);
+    const routes=L.layerGroup().addTo(instance),roads=L.layerGroup().addTo(instance);layers.current.routes=routes;layers.current.edges=roads;
+    const nodes=Object.fromEntries(state.nodes.map(n=>[n.id,n]));
+    const edges=new Map(state.edges.map(e=>[[e.a,e.b].sort().join('|'),e]));
+    for(const edge of state.edges){
+      const proposed=edge.id.includes('_e');if(mode!=='edge'&&!edge.closed&&!proposed)continue;
+      const points=edge.geom?edge.geom.coordinates.map(([lon,lat])=>[lat,lon]):[latlng(nodes[edge.a]),latlng(nodes[edge.b])];
+      const line=L.polyline(points,{color:edge.closed?'#bf594e':proposed?'#0075c6':'#7b9c87',weight:mode==='edge'?5:4,opacity:edge.closed?1:.5,dashArray:edge.closed?'7 5':undefined}).addTo(roads);
+      line.bindTooltip(`${edge.closed?'Перекрыта':'Открыта'} · ${Math.round(edge.length||0)} м`);
+      if(!compact)line.on('click',event=>{const current=latest.current;if(['add_home','add_area','add_stop','add_object','move_stop'].includes(current.mode))current.onPlace(xy(event.latlng));else if(current.mode==='edge')current.onSelect('edge',edge);});
+    }
+    const row=metrics.rows.find(h=>h.id===selectedHome);
+    if(!row)return;
+    for(const kind of ['stop','park']){
+      const direct=row[kind+'_route'];if(direct?.length){L.polyline(direct.map(([lon,lat])=>[lat,lon]),{color:kind==='stop'?'#c98d25':'#28835c',weight:4,opacity:.95,dashArray:kind==='park'?'7 5':undefined,interactive:false}).addTo(routes);continue;}
+      const path=row[kind+'_path'],target=state.objects.find(o=>o.id===row[kind+'_target']);if(!target||!path.length)continue;
+      const points=[latlng(row),latlng(nodes[path[0]])];
+      for(let i=1;i<path.length;i++){
+        const edge=edges.get([path[i-1],path[i]].sort().join('|'));
+        if(edge?.geom){let coords=edge.geom.coordinates.map(([lon,lat])=>[lat,lon]);const start=latlng(nodes[path[i-1]]);if(L.latLng(start).distanceTo(coords[0])>L.latLng(start).distanceTo(coords.at(-1)))coords=coords.slice().reverse();points.push(...coords);}
+        else points.push(latlng(nodes[path[i]]));
+      }
+      points.push(latlng(target));L.polyline(points,{color:kind==='stop'?'#c98d25':'#28835c',weight:4,opacity:.95,dashArray:kind==='park'?'7 5':undefined,interactive:false}).addTo(routes);
+    }
+  },[state,metrics,selectedHome,mode]);
+  useEffect(()=>{
+    const instance=map.current;if(!instance)return;
+    if(layers.current.relocation)instance.removeLayer(layers.current.relocation);
+    const group=L.layerGroup().addTo(instance);layers.current.relocation=group;
+    const selected=state.objects.find(o=>o.id===props.movingStopId);
+    if(selected){L.circleMarker(latlng(selected),{radius:12,color:'#138acb',weight:3,fillOpacity:0,interactive:false}).addTo(group);instance.flyTo(latlng(selected),17,{duration:.4});}
+    const change=props.relocation;
+    if(change?.before&&change?.after){
+      const a=latlng(change.before),b=latlng(change.after);
+      L.circleMarker(a,{radius:8,color:'#be7967',dashArray:'4 4',fillOpacity:0,interactive:false}).bindTooltip('Прежнее место',{permanent:true,direction:'top'}).addTo(group);
+      L.circleMarker(b,{radius:9,color:'#158bcc',fillColor:'#42b3ff',fillOpacity:.8,interactive:false}).bindTooltip('Предлагаемое место',{permanent:true,direction:'bottom'}).addTo(group);
+      L.polyline([a,b],{color:'#158bcc',dashArray:'6 5',weight:3,interactive:false}).addTo(group);
+      instance.fitBounds(L.latLngBounds([a,b]),{padding:[55,55],maxZoom:17});
+    }
+  },[props.movingStopId,props.relocation?.before?.id,props.relocation?.before?.x,props.relocation?.before?.y,props.relocation?.after?.x,props.relocation?.after?.y]);
+  useEffect(()=>{
+    const instance=map.current;if(!instance)return;
+    if(layers.current.areas)instance.removeLayer(layers.current.areas);
+    const group=L.layerGroup().addTo(instance);layers.current.areas=group;
+    for(const area of state.areas||[]){const layer=L.geoJSON(area.geom,{interactive:false,style:{color:'#147dcc',weight:2,dashArray:'9 5',fillColor:'#42b3ff',fillOpacity:.09}}).addTo(group);layer.bindTooltip(area.name,{permanent:true,direction:'center',className:'area-map-label'});}
+  },[state.areas]);
+  useEffect(()=>{const obj=state.objects.find(o=>o.id===props.focusObject?.id);if(obj)map.current?.flyTo(latlng(obj),17,{duration:.4});},[props.focusObject]);
+  useEffect(()=>{
+    if(!placing||compact)return;
+    map.current?.closePopup();
+    const panel=container.current?.parentElement;if(panel)window.scrollTo({top:window.scrollY+panel.getBoundingClientRect().top-20,behavior:'smooth'});
+  },[mode,compact]);
+  useEffect(()=>{
+    if(layers.current.placement)map.current?.removeLayer(layers.current.placement);
+    if(placement)layers.current.placement=L.circleMarker(placement,{radius:10,color:'#0077c8',weight:3,fillColor:'#42b3ff',fillOpacity:.55,interactive:false}).addTo(map.current);
+  },[placement]);
+  useEffect(()=>{
+    if(layers.current.sketch)map.current?.removeLayer(layers.current.sketch);
+    const group=L.layerGroup().addTo(map.current);layers.current.sketch=group;
+    for(const path of props.sketchPaths||[])if(path.points.length>1)L.polyline(path.points.map(latlng),{color:'#0075c6',weight:4,dashArray:'6 4',interactive:false}).addTo(group);
+    const points=props.drawPoints||[];
+    if(points.length>1){const factory=mode==='draw_polygon'?L.polygon:L.polyline;factory(points.map(latlng),{color:'#0075c6',weight:3,fillOpacity:.14,interactive:false}).addTo(group);}
+    for(const point of points)L.circleMarker(latlng(point),{radius:5,color:'#006fab',fillOpacity:1,interactive:false}).addTo(group);
+  },[props.drawPoints,props.sketchPaths,mode]);
+  useEffect(()=>{
+    if(layers.current.draftHomes)map.current?.removeLayer(layers.current.draftHomes);
+    const group=L.layerGroup().addTo(map.current);layers.current.draftHomes=group;
+    for(const obj of state.objects.filter(o=>['home','stop'].includes(o.kind)&&(o.source==='proposal'||(state.draft_ids||[]).includes(o.id)))){
+      if(obj.geom)L.geoJSON(obj.geom,{interactive:false,style:{color:'#0066b0',weight:3,fillColor:'#42b3ff',fillOpacity:.75}}).addTo(group);
+      L.circleMarker(latlng(obj),{radius:5,color:'#0066b0',fillColor:obj.kind==='stop'?'#e8ba46':'white',fillOpacity:1,weight:2,interactive:false}).bindTooltip(obj.name,{permanent:true,direction:'top',className:'draft-home-label'}).addTo(group);
+    }
+  },[state.objects,state.draft_ids]);
+  useEffect(()=>{
+    if(props.focusBoundary?.length>=3)map.current?.fitBounds(L.latLngBounds(props.focusBoundary.map(latlng)),{padding:[45,45],maxZoom:17,animate:false});
+  },[props.focusBoundary]);
+  const previous=useRef();
+  useEffect(()=>{if(previous.current&&(previous.current!==selectedHome||props.focusRequest)){const home=state.objects.find(o=>o.id===selectedHome);if(home)map.current?.flyTo(latlng(home),17,{duration:.45});}previous.current=selectedHome;},[selectedHome,props.focusRequest]);
+  useEffect(() => {
+    if (props.viewReset) map.current?.setView([55.108, 36.612], 14);
+  }, [props.viewReset]);
+
   return (
-    <div className={`map-panel compact?'compact-map':''{full ? 'map-fullscreen ' : ''}${placing && !compact ? 'placing-object' : ''}`}>
+    <div className={`map-panel ${compact ? 'compact-map ' : ''}${full ? 'map-fullscreen ' : ''}${placing && !compact ? 'placing-object' : ''}`}>
       <div className="map-top">
         <div>
           <span className="map-status">{compact ? 'ПРЕДПРОСМОТР' : 'КАРТА ГОРОДА'}</span>
@@ -284,15 +364,19 @@ export default function CityMap(props) {
              mode === 'add_stop' ? 'Остановка: нажмите на место' : 'Инфраструктура: нажмите на место'}
           </strong>
           <span>
-            {mode.startsWith('draw_') ? 'Завершите рисование кнопкой в конструкторе.' : 'Можно выбрать пустой участок или лес. После клика откроется форма.'}
+            {props.placementHint || (mode.startsWith('draw_') ? 'Завершите рисование кнопкой в конструкторе.' : 'Можно выбрать пустой участок или лес. После клика откроется форма.')}
           </span>
-          <button type="button" className="secondary small" onClick={() => {
+          {!mode.startsWith('draw_') && (
+          <button type="button" className="secondary small" disabled={props.busy} onClick={() => {
             const point = map.current.getCenter();
             setPlacement(point);
             props.onPlace(xy(point));
           }}>
             Выбрать центр карты
           </button>
+          )}
+          {full && props.drawingControls && <div className="map-drawing-controls">{props.drawingControls}</div>}
+          {full && props.drawingError && <p className="map-drawing-error" role="alert">{props.drawingError}</p>}
         </div>
       )}
       
