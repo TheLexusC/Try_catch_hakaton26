@@ -29,6 +29,15 @@ def initialize(dsn=DATABASE):
         if inserted:
             write_state(db,seed_state())
             if dsn==DATABASE:migrate_legacy_users(db)
+        if dsn==DATABASE:
+            db.execute('SELECT pg_advisory_xact_lock(204027)')
+            model=db.execute('SELECT population_model_version FROM districts WHERE id=%s FOR UPDATE',(DISTRICT,)).fetchone()
+            if model['population_model_version']<1:
+                # Recalibrate existing OSM homes only; preserve projects, demolitions,
+                # map version and residents entered for proposed homes.
+                values=[(o['residents'],o['id'],DISTRICT) for o in seed_state()['objects'] if o['kind']=='home']
+                with db.cursor() as cursor:cursor.executemany("UPDATE objects SET residents=%s WHERE id=%s AND district_id=%s AND kind='home' AND source='osm'",values)
+                db.execute('UPDATE districts SET population_model_version=1 WHERE id=%s',(DISTRICT,))
 
 
 def migrate_legacy_users(db):
@@ -40,7 +49,7 @@ def migrate_legacy_users(db):
 
 def read_state(db,write=False):
     row=db.execute('SELECT version,demolition_limit FROM districts WHERE id=%s FOR '+('UPDATE' if write else 'SHARE'),(DISTRICT,)).fetchone()
-    state={'version':row['version'],'demolition_policy':{'limit':row['demolition_limit']}}
+    state={'version':row['version'],'demolition_policy':{'limit':row['demolition_limit']},'base_population':133000}
     for table in ('nodes','edges','objects'):
         state[table]=[dict(r) for r in db.execute(f'SELECT * FROM {table} WHERE district_id=%s ORDER BY id',(DISTRICT,)).fetchall()]
         for item in state[table]:item.pop('district_id')

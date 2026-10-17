@@ -593,3 +593,22 @@ def test_district_stop_and_paths_are_included_in_total_preview_and_approval(env)
     p=c.post('/api/proposals',json={'actions':actions,'base_version':0});assert p.status_code==201,p.text
     assert decide(c,p.json()['id']).status_code==200
     assert c.get('/api/city').json()['metrics']==preview.json()['after']
+
+
+def test_population_recalibration_preserves_proposals_and_project_residents(env,monkeypatch):
+    import backend.data as data
+    _,c,path=env;register(c);assert proposal(c).status_code==201
+    with connect(path) as db:
+        db.execute("UPDATE objects SET source='osm' WHERE id='h1'")
+        db.execute("UPDATE objects SET source='proposal',residents=45 WHERE id='h2'")
+    monkeypatch.setattr(data,'DATABASE',path)
+    monkeypatch.setattr(data,'seed_state',lambda:{'objects':[{'id':'h1','kind':'home','residents':133000}]})
+    data.initialize(path)
+    with connect(path) as db:
+        assert db.execute("SELECT residents FROM objects WHERE id='h1'").fetchone()['residents']==133000
+        assert db.execute("SELECT residents FROM objects WHERE id='h2'").fetchone()['residents']==45
+        assert db.execute('SELECT count(*) FROM proposals').fetchone()['count']==1
+        assert db.execute('SELECT count(*) FROM users').fetchone()['count']==1
+    monkeypatch.setattr(data,'seed_state',lambda:{'objects':[{'id':'h1','kind':'home','residents':1}]})
+    data.initialize(path)
+    with connect(path) as db:assert db.execute("SELECT residents FROM objects WHERE id='h1'").fetchone()['residents']==133000

@@ -111,3 +111,5 @@ ALTER TABLE proposals ADD COLUMN IF NOT EXISTS action_names jsonb NOT NULL DEFAU
 CREATE TABLE IF NOT EXISTS demo_backups (
  id bigserial PRIMARY KEY,district_id text NOT NULL REFERENCES districts(id),payload jsonb NOT NULL,created_at text NOT NULL
 );
+
+ALTER TABLE districts ADD COLUMN IF NOT EXISTS population_model_version integer NOT NULL DEFAULT 0;
