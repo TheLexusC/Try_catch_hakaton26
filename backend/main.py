@@ -23,7 +23,7 @@ from .data import DATABASE, METADATA, apply_action, connect, initialize, read_st
 from .seed import DISTRICT
 from .metrics import calculate_metrics
 from .planning import plan_changes, PRICES, LABELS, annotate_costs, blocking_reason
-from .schemas import Credentials, Decision, Preview, Proposal, Registration, BudgetUpdate
+from .schemas import Credentials, Decision, Preview, Proposal, Registration, BudgetUpdate, ScenarioSave, ScenarioCompare, AnalysisOptions, DemoReset, HomeLayout
 
 SESSION_TTL = 7 * 24 * 3600
 COOKIE = 'obninsk_session'
@@ -101,6 +101,8 @@ def create_app(db_path=DATABASE):
             response.headers['Cache-Control'] = 'no-store'
         else:
             response = await call_next(request)
+        if not request.url.path.startswith('/api/') and (request.url.path=='/' or request.url.path.endswith('.html')):
+            response.headers['Cache-Control']='no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response.headers['X-Frame-Options'] = 'DENY'
@@ -159,6 +161,14 @@ def create_app(db_path=DATABASE):
     def serialize_proposal(row):
         result = dict(row)
         result['actions']=row['action'].get('actions',[row['action']])
+        result['action_names']=row.get('action_names') or {}
+        missing=[a['id'] for a in result['actions'] if a['id'] not in result['action_names'] and a['entity']=='object']
+        if missing:
+            with connect(db_path) as db:
+                names=db.execute('SELECT id,name FROM objects WHERE district_id=%s AND id=ANY(%s) UNION SELECT id,name FROM demolitions WHERE district_id=%s AND id=ANY(%s)',(DISTRICT,missing,DISTRICT,missing)).fetchall()
+            result['action_names']={**{n['id']:n['name'] for n in names},**result['action_names']}
+        if len(result['actions'])==1 and row.get('target_name'):
+            result['action_names'].setdefault(result['actions'][0]['id'],row['target_name'])
         return result
 
     @app.get('/api/health')
@@ -231,6 +241,17 @@ def create_app(db_path=DATABASE):
                        (DISTRICT,user['id'],old,payload.limit,now()))
         return {'limit':payload.limit,'mode':'per_building'}
 
+    @app.post('/api/layout/fit')
+    def layout_fit(payload: HomeLayout,user=Depends(current_session)):
+        from .layout import fit_layout
+        with connect(db_path) as db:
+            state=read_state(db)
+            context=[dict(r) for r in db.execute("SELECT kind,geometry FROM map_context WHERE district_id=%s AND kind IN ('road','water')",(DISTRICT,)).fetchall()]
+        try:
+            houses=fit_layout(state,[h.model_dump() for h in payload.houses],[p.model_dump() for p in payload.boundary],[[p.model_dump() for p in road] for road in payload.roads],context)
+            return {'houses':houses}
+        except (ValueError,TypeError) as error:raise HTTPException(422,str(error)) from error
+
     @app.post('/api/preview')
     def preview(payload: Preview, user=Depends(current_session)):
         with connect(db_path) as db:state = read_state(db)
@@ -252,8 +273,8 @@ def create_app(db_path=DATABASE):
             pending = db.execute("SELECT count(*) FROM proposals WHERE author_id=%s AND status='pending'", (user['id'],)).fetchone()['count']
             if pending >= 20:raise HTTPException(429, 'У вас уже 20 заявок на модерации. Дождитесь решения.')
             target_name=estimate['lines'][0]['name'] if len(estimate['lines'])==1 else f"Набор из {len(estimate['lines'])} изменений"
-            db.execute('''INSERT INTO proposals(id,district_id,author_id,action,reason,base_version,created_at,target_name,estimated_cost)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (proposal_id, DISTRICT, user['id'], action, payload.reason.strip() or 'Предложение изменений городской инфраструктуры.', payload.base_version, now(), target_name,estimate['total']))
+            db.execute('''INSERT INTO proposals(id,district_id,author_id,action,reason,base_version,created_at,target_name,estimated_cost,action_names)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (proposal_id, DISTRICT, user['id'], action, payload.reason.strip() or 'Предложение изменений городской инфраструктуры.', payload.base_version, now(), target_name,estimate['total'],Jsonb({line['id']:line['name'] for line in estimate['lines']})))
         return {'id': proposal_id, 'status': 'pending', 'message': 'Набор отправлен на модерацию. Изменения ещё не применены.'}
 
     @app.get('/api/proposals')
@@ -294,14 +315,14 @@ def create_app(db_path=DATABASE):
                 raise HTTPException(404, 'Заявка не найдена')
             if row['status'] != 'pending':
                 raise HTTPException(409, 'Заявка уже закрыта. Повторное решение невозможно.')
-            if row['author_id'] == user['id']:
+            if row['author_id'] == user['id'] and user['role']!='admin':
                 raise HTTPException(403, 'Собственную заявку должен рассмотреть другой модератор')
             applied_version = None
             if payload.decision == 'approved':
                 state = read_state(db, write=True)
                 change = Preview(**({'actions':row['action']['actions']} if 'actions' in row['action'] else {'action':row['action']}),base_version=row['base_version'])
                 after,estimate = checked_change(state, change)
-                if not estimate['can_submit']:raise HTTPException(409,'Одобрение невозможно: доступного бюджета больше не хватает')
+                if not estimate['can_submit']:raise HTTPException(409,blocking_reason(estimate))
                 after['version'] += 1
                 applied_version = after['version']
                 for action in change.changes():save_change(db, after, action)
@@ -310,6 +331,93 @@ def create_app(db_path=DATABASE):
             db.execute('''UPDATE proposals SET status=%s,closed_at=%s,reviewer_id=%s,comment=%s,applied_version=%s
                 WHERE id=%s''', (payload.decision, closed_at, user['id'], payload.comment, applied_version, proposal_id))
         return {'id': proposal_id, 'status': payload.decision, 'closed_at': closed_at, 'applied_version': applied_version}
+
+    @app.post('/api/admin/demo-reset')
+    def demo_reset(payload: DemoReset,user=Depends(current_session)):
+        if user['role']!='admin':raise HTTPException(403,'Доступно только администратору')
+        with connect(db_path) as db:
+            db.execute('SELECT pg_advisory_xact_lock(204027)')
+            state=read_state(db,write=True)
+            if payload.action=='undo':
+                backup=db.execute('SELECT * FROM demo_backups WHERE district_id=%s ORDER BY id DESC LIMIT 1 FOR UPDATE',(DISTRICT,)).fetchone()
+                if not backup:raise HTTPException(409,'Нет резервной копии для восстановления')
+                saved=backup['payload'];original_version=saved['state']['version'];restored=saved['state'];restored['version']=state['version']+1
+                write_state(db,restored)
+                for area in restored.get('areas',[]):
+                    db.execute('INSERT INTO planning_areas(id,district_id,name,x,y,width,height,geom) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)',(area['id'],DISTRICT,area['name'],area['x'],area['y'],area['width'],area['height'],Jsonb(area['geom'])))
+                for item in restored.get('demolished',[]):
+                    db.execute('INSERT INTO demolitions(district_id,id,name,geom) VALUES(%s,%s,%s,%s)',(DISTRICT,item['id'],item['name'],Jsonb(item['geom'])))
+                for table in ('proposals','scenarios'):
+                    db.execute(f'DELETE FROM {table} WHERE district_id=%s',(DISTRICT,))
+                    for row in saved[table]:
+                        if table=='proposals' and row['status']=='pending' and row['base_version']==original_version:
+                            row['base_version']=restored['version']
+                        # All columns come from our own database backup, never from request data.
+                        cols=list(row);values=[Jsonb(row[k]) if k in {'action','actions','action_names'} else row[k] for k in cols]
+                        db.execute(f'INSERT INTO {table}({",".join(cols)}) VALUES({",".join(["%s"]*len(cols))})',values)
+                db.execute('DELETE FROM demo_backups WHERE id=%s',(backup['id'],))
+            else:
+                state['context']=[dict(r) for r in db.execute('SELECT id,kind,name,geometry FROM map_context WHERE district_id=%s',(DISTRICT,)).fetchall()]
+                saved={'state':state,**{table:[dict(r) for r in db.execute(f'SELECT * FROM {table} WHERE district_id=%s',(DISTRICT,)).fetchall()] for table in ('proposals','scenarios')}}
+                db.execute('INSERT INTO demo_backups(district_id,payload,created_at) VALUES(%s,%s,%s)',(DISTRICT,Jsonb(saved),now()))
+                db.execute('DELETE FROM proposals WHERE district_id=%s',(DISTRICT,))
+                if payload.action=='reset_all':
+                    from .data import seed_state
+                    initial=seed_state();initial['version']=state['version']+1
+                    write_state(db,initial)
+                    db.execute('DELETE FROM scenarios WHERE district_id=%s',(DISTRICT,))
+        return {'ok':True,'action':payload.action}
+
+    @app.get('/api/scenarios')
+    def list_scenarios(user=Depends(current_session)):
+        with connect(db_path) as db:
+            rows=db.execute('SELECT id,name,actions,base_version,created_at FROM scenarios WHERE author_id=%s AND district_id=%s ORDER BY created_at DESC',(user['id'],DISTRICT)).fetchall()
+        return {'items':[dict(r) for r in rows]}
+
+    @app.post('/api/scenarios',status_code=201)
+    def save_scenario(payload: ScenarioSave,user=Depends(current_session)):
+        with connect(db_path) as db:
+            db.execute('SELECT pg_advisory_xact_lock(204027)')
+            state=read_state(db);checked_change(state,payload)
+            if db.execute('SELECT count(*) FROM scenarios WHERE author_id=%s',(user['id'],)).fetchone()['count']>=50:
+                raise HTTPException(429,'Можно сохранить до 50 сценариев')
+            sid=str(uuid.uuid4())
+            db.execute('INSERT INTO scenarios(id,district_id,author_id,name,actions,base_version,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s)',(sid,DISTRICT,user['id'],payload.name,Jsonb(payload.changes()),payload.base_version,now()))
+        return {'id':sid,'name':payload.name}
+
+    def owned_scenario(db,sid,user):
+        row=db.execute('SELECT * FROM scenarios WHERE id=%s AND author_id=%s AND district_id=%s',(sid,user['id'],DISTRICT)).fetchone()
+        if not row:raise HTTPException(404,'Сценарий не найден')
+        return row
+
+    @app.post('/api/scenarios/compare')
+    def compare_scenarios(payload: ScenarioCompare,user=Depends(current_session)):
+        with connect(db_path) as db:
+            state=read_state(db);saved=[owned_scenario(db,sid,user) for sid in dict.fromkeys(payload.ids)]
+        items=[]
+        for row in saved:
+            item=dict(id=row['id'],name=row['name'],rebased=row['base_version']!=state['version'])
+            try:
+                after,estimate=plan_changes(state,row['actions'])
+                metrics=calculate_metrics(after,payload.park_radius,payload.park_radii)
+                summary={k:metrics[k] for k in ['park_percent','transport_access','facility_provision','average_stop','total_residents','home_count']}
+                value=summary[payload.target]
+                meets=value is not None and (value<=payload.threshold if payload.target=='average_stop' else value>=payload.threshold)
+                item.update(metrics=summary,total=estimate['total'],can_submit=estimate['can_submit'],meets_target=meets,error='')
+            except (ValueError,PermissionError) as error:item.update(error=str(error),can_submit=False,meets_target=False)
+            items.append(item)
+        suitable=[i for i in items if i['can_submit'] and i['meets_target']]
+        recommended=min(suitable,key=lambda i:(i['total'],i['id']))['id'] if suitable else None
+        return {'items':items,'recommended_id':recommended,'evaluated_version':state['version'],'message':'Среди достигших цели выбран вариант с минимальной справочной стоимостью.' if recommended else 'Ни один доступный сценарий не достиг цели.'}
+
+    @app.post('/api/scenarios/{sid}/evaluate')
+    def evaluate_scenario(sid:str,payload:AnalysisOptions,user=Depends(current_session)):
+        with connect(db_path) as db:
+            row=owned_scenario(db,sid,user);state=read_state(db)
+        try:after,estimate=plan_changes(state,row['actions'])
+        except (ValueError,PermissionError) as error:raise HTTPException(409,str(error)) from error
+        return {'before':calculate_metrics(state,payload.park_radius,payload.park_radii),'after':calculate_metrics(after,payload.park_radius,payload.park_radii),
+                'state':after,'estimate':estimate,'actions':row['actions'],'base_version':state['version'],'rebased':row['base_version']!=state['version'],'name':row['name']}
 
     # The built React app is served from the same origin as the API.
     dist = Path(__file__).parent.parent / 'frontend' / 'dist'

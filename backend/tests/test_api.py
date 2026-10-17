@@ -191,7 +191,7 @@ def test_direct_postgres_load_is_visible_in_api(env):
 @pytest.mark.parametrize('action',[
     dict(entity='object',operation='update',id='h1',values={'x':50}),
     dict(entity='object',operation='update',id='h1',values={'residents':1}),
-    dict(entity='object',operation='add',id='fake',values={'name':'Fake','kind':'home','x':50,'y':50}),
+    dict(entity='object',operation='add',id='fake',values={'name':'Fake','kind':'home','x':50,'y':50,'capacity':999}),
     dict(entity='object',operation='add',id='fake',values={'name':'Fake','kind':'park','x':50,'y':50,'load':10}),
     dict(entity='node',operation='update',id='n1',values={'x':50}),
     dict(entity='edge',operation='delete',id='e1',values={}),
@@ -420,3 +420,176 @@ def test_demolition_limit_does_not_limit_parks_or_stop_relocation(env):
     r=c.post('/api/proposals',json=payload);assert r.status_code==201
     assert decide(mod,r.json()['id']).status_code==200
     mod.close()
+
+
+
+def home_action(oid='new-home'):
+    return dict(entity='object',operation='add',id=oid,values=dict(name='Проектный дом',kind='home',x=500,y=500,width=20,height=30,residents=250))
+
+
+def test_new_home_and_area_are_moderated_persist_and_change_population(env):
+    app,c,dsn=env;register(c);before=c.get('/api/city').json()
+    area=dict(entity='area',operation='add',id='new-area',values=dict(name='Новый район',x=500,y=500,width=600,height=600))
+    payload=dict(actions=[area,home_action()],base_version=0)
+    preview=c.post('/api/preview',json=payload);assert preview.status_code==200,preview.text
+    assert preview.json()['after']['total_residents']==before['metrics']['total_residents']+250
+    assert preview.json()['after']['home_count']==before['metrics']['home_count']+1
+    assert preview.json()['state']['areas'][0]['name']=='Новый район'
+    assert c.get('/api/city').json()['state']==before['state']
+    r=c.post('/api/proposals',json=payload);assert r.status_code==201,r.text
+    mod=moderator(app,dsn);assert decide(mod,r.json()['id']).status_code==200
+    actual=c.get('/api/city').json()
+    obj=next(o for o in actual['state']['objects'] if o['id']=='new-home')
+    assert obj['geom']['type']=='Polygon' and obj['residents']==250 and obj['source']=='proposal'
+    assert actual['metrics']==preview.json()['after']
+    assert actual['state']['areas']==preview.json()['state']['areas']
+    with connect(dsn) as db:
+        assert db.execute("SELECT geom FROM objects WHERE id='new-home'").fetchone()['geom']==obj['geom']
+        assert db.execute("SELECT name FROM planning_areas WHERE id='new-area'").fetchone()['name']=='Новый район'
+    mod.close()
+
+
+def test_admin_can_approve_own_request(env):
+    _,c,dsn=env;register(c,'single-admin@obninsk.test')
+    with connect(dsn) as db:db.execute("UPDATE users SET role='admin' WHERE email='single-admin@obninsk.test'")
+    pid=proposal(c).json()['id']
+    r=c.post(f'/api/proposals/{pid}/decision',json={'decision':'approved'})
+    assert r.status_code==200,r.text
+    item=c.get('/api/proposals').json()['items'][0]
+    assert item['status']=='approved' and item['author_id']==item['reviewer_id']
+
+
+def test_scenarios_are_private_persistent_and_compare_on_same_city(env):
+    app,c,dsn=env;register(c)
+    actions=[dict(entity='object',operation='add',id='scenario-stop',values=dict(name='Остановка сценария',kind='stop',x=700,y=700))]
+    a=c.post('/api/scenarios',json=dict(name='Остановка',actions=actions,base_version=0));assert a.status_code==201,a.text
+    b=c.post('/api/scenarios',json=dict(name='Парк',actions=[dict(entity='object',operation='add',id='scenario-park',values=dict(name='Парк сценария',kind='park',x=800,y=700))],base_version=0));assert b.status_code==201
+    ids=[a.json()['id'],b.json()['id']]
+    before=c.get('/api/city').json()['state']
+    payload=dict(ids=ids,target='transport_access',threshold=0,park_radius=200,park_radii=[100,200,500])
+    r=c.post('/api/scenarios/compare',json=payload);assert r.status_code==200,r.text
+    assert r.json()['recommended_id']==ids[0]
+    assert all(i['meets_target'] for i in r.json()['items'])
+    assert c.get('/api/city').json()['state']==before
+    evaluated=c.post(f'/api/scenarios/{ids[0]}/evaluate',json=dict(park_radius=200,park_radii=[100,200]))
+    assert evaluated.status_code==200 and evaluated.json()['after']['radius']==200
+    assert evaluated.json()['actions']==actions
+    other=TestClient(app);register(other,'scenario-other@obninsk.test')
+    assert other.get('/api/scenarios').json()['items']==[]
+    assert other.post('/api/scenarios/compare',json=payload).status_code==404
+    assert other.post(f'/api/scenarios/{ids[0]}/evaluate',json={}).status_code==404
+    with TestClient(create_app(dsn)) as reopened:
+        reopened.cookies.set('obninsk_session',c.cookies.get('obninsk_session'))
+        assert len(reopened.get('/api/scenarios').json()['items'])==2
+    other.close()
+
+
+def test_scenario_invalid_geometry_and_targets_are_rejected(env):
+    _,c,_=env;register(c)
+    bad=home_action();bad['values']['x']=2
+    assert c.post('/api/preview',json=dict(action=bad,base_version=0)).status_code==422
+    assert c.post('/api/scenarios',json=dict(name='Неверно',action=bad,base_version=0)).status_code==422
+    assert c.post('/api/scenarios/compare',json=dict(ids=['x'],park_radii=[-1])).status_code==422
+
+
+def test_parking_greenery_moderation_and_names_survive_deletion(env):
+    app,c,path=env;register(c)
+    with connect(path) as db:db.execute("UPDATE users SET role='admin'")
+    actions=[{'entity':'object','operation':'add','id':'new-'+kind,'values':{'kind':kind,'name':name,'x':500,'y':400}} for kind,name in [('parking','Парковка у дома'),('greenery','Озеленение двора')]]
+    r=c.post('/api/proposals',json={'actions':actions,'base_version':0});assert r.status_code==201,r.text
+    assert decide(c,r.json()['id']).status_code==200
+    city=c.get('/api/city').json();assert {p['kind'] for p in city['metrics']['provision']} >= {'parking','greenery'}
+    actions=[{'entity':'object','operation':'delete','id':a['id'],'values':{}} for a in actions]
+    r=c.post('/api/proposals',json={'actions':actions,'base_version':1});assert r.status_code==201,r.text
+    assert decide(c,r.json()['id']).status_code==200
+    item=c.get('/api/proposals').json()['items'][0]
+    assert item['status']=='approved' and item['action_names']=={'new-parking':'Парковка у дома','new-greenery':'Озеленение двора'}
+
+
+def test_admin_demo_reset_and_undo_preserve_accounts(env):
+    app,c,path=env;register(c)
+    assert c.post('/api/admin/demo-reset',json={'action':'reset_all'}).status_code==403
+    mod=moderator(app,path)
+    assert mod.post('/api/admin/demo-reset',json={'action':'clear_proposals'}).status_code==403
+    with connect(path) as db:db.execute("UPDATE users SET role='admin' WHERE email='resident@example.com'")
+    p=proposal(c);assert p.status_code==201;assert decide(c,p.json()['id']).status_code==200
+    before=c.get('/api/city').json()['state']
+    assert c.post('/api/admin/demo-reset',json={'action':'reset_all'}).status_code==200
+    after=c.get('/api/city').json()['state'];assert after['version']>before['version']
+    assert not c.get('/api/proposals').json()['items'] and c.get('/api/auth/me').status_code==200
+    assert not next(e for e in after['edges'] if e['id']==MAP['edges'][0]['id'])['closed']
+    assert c.post('/api/admin/demo-reset',json={'action':'undo'}).status_code==200
+    restored=c.get('/api/city').json()['state'];assert restored['objects']==before['objects'] and restored['edges']==before['edges']
+    assert c.get('/api/proposals').json()['items'][0]['status']=='approved'
+    assert c.post('/api/admin/demo-reset',json={'action':'undo'}).status_code==409
+
+
+def test_clear_proposals_does_not_change_map_and_can_undo(env):
+    _,c,path=env;register(c)
+    with connect(path) as db:db.execute("UPDATE users SET role='admin'")
+    assert proposal(c).status_code==201
+    before=c.get('/api/city').json()['state']
+    assert c.post('/api/admin/demo-reset',json={'action':'clear_proposals'}).status_code==200
+    assert c.get('/api/city').json()['state']==before
+    assert not c.get('/api/proposals').json()['items']
+    assert c.post('/api/admin/demo-reset',json={'action':'undo'}).status_code==200
+    assert len(c.get('/api/proposals').json()['items'])==1
+
+
+def test_polygon_district_houses_and_roads_moderate_as_one_project(env):
+    _,c,path=env;register(c)
+    with connect(path) as db:db.execute("UPDATE users SET role='admin'")
+    actions=[{'entity':'area','operation':'add','id':'polygon-area','values':{'name':'Район у леса','points':[{'x':100,'y':100},{'x':700,'y':100},{'x':650,'y':700},{'x':100,'y':600}]}},
+             {'entity':'road','operation':'add','id':'project-road','values':{'name':'Новая дорожка','points':[{'x':200,'y':200},{'x':350,'y':400},{'x':600,'y':600}]}},
+             {'entity':'object','operation':'add','id':'project-house','values':{'name':'Дом у дорожки','kind':'home','x':350,'y':410,'width':20,'height':30,'residents':150}}]
+    before=c.get('/api/city').json()['state']
+    payload={'actions':actions,'base_version':0}
+    preview=c.post('/api/preview',json=payload);assert preview.status_code==200,preview.text
+    assert c.get('/api/city').json()['state']==before
+    r=c.post('/api/proposals',json=payload);assert r.status_code==201,r.text
+    assert decide(c,r.json()['id']).status_code==200
+    result=c.get('/api/city').json();assert result['metrics']==preview.json()['after']
+    assert next(a for a in result['state']['areas'] if a['id']=='polygon-area')['geom']['type']=='Polygon'
+    assert len([e for e in result['state']['edges'] if e['id'].startswith('project-road_e')])==4
+    house=next(o for o in result['state']['objects'] if o['id']=='project-house')
+    assert house['node_id'].startswith('project-road_n')
+
+
+def test_invalid_polygon_and_road_do_not_mutate_city(env):
+    _,c,_=env;register(c);before=c.get('/api/city').json()['state']
+    for entity,points in [('area',[{'x':0,'y':0},{'x':200,'y':200},{'x':0,'y':200},{'x':200,'y':0}]),('road',[{'x':200,'y':200},{'x':200,'y':200}])]:
+        r=c.post('/api/proposals',json={'action':{'entity':entity,'operation':'add','id':'invalid-shape','values':{'name':'Проверка','points':points}},'base_version':0})
+        assert r.status_code==422,r.text
+    assert c.get('/api/city').json()['state']==before
+
+
+def test_fitted_home_outline_persists_through_approval(env):
+    _,c,path=env;register(c)
+    with connect(path) as db:db.execute("UPDATE users SET role='admin'")
+    specs=[dict(id='fit-home-one',name='Первый дом',x=600,y=600,width=200,height=100,residents=100),dict(id='fit-home-two',name='Второй дом',x=900,y=600,width=100,height=100,residents=100)]
+    r=c.post('/api/layout/fit',json={'houses':specs});assert r.status_code==200,r.text
+    fitted=r.json()['houses'];assert len(fitted)==2
+    actions=[{'entity':'object','operation':'add','id':h['id'],'values':{k:h[k] for k in ['name','kind','x','y','width','height','residents','points','rotation']}} for h in fitted]
+    p=c.post('/api/proposals',json={'actions':actions,'base_version':0});assert p.status_code==201,p.text
+    assert decide(c,p.json()['id']).status_code==200
+    state=c.get('/api/city').json()['state']
+    for h in fitted:assert next(o for o in state['objects'] if o['id']==h['id'])['geom']==h['geom']
+    r=c.post('/api/layout/fit',json={'houses':[{**specs[0],'width':201}]});assert r.status_code==422
+
+
+def test_district_stop_and_paths_are_included_in_total_preview_and_approval(env):
+    _,c,path=env;register(c)
+    with connect(path) as db:db.execute("UPDATE users SET role='admin'")
+    base=[{'entity':'area','operation':'add','id':'stop-area','values':{'name':'Новый район','points':[{'x':100,'y':100},{'x':1000,'y':100},{'x':1000,'y':850},{'x':100,'y':850}]}},
+          {'entity':'road','operation':'add','id':'stop-road','values':{'name':'Дорожка','points':[{'x':100,'y':700},{'x':1000,'y':700}]}},
+          {'entity':'object','operation':'add','id':'stop-home','values':{'name':'Дом','kind':'home','x':800,'y':710,'width':20,'height':20,'residents':300}}]
+    stop={'entity':'object','operation':'add','id':'district-stop','values':{'name':'Остановка района','kind':'stop','x':820,'y':710}}
+    without=c.post('/api/preview',json={'actions':base,'base_version':0});assert without.status_code==200,without.text
+    actions=[*base,stop]
+    preview=c.post('/api/preview',json={'actions':actions,'base_version':0});assert preview.status_code==200,preview.text
+    house=next(h for h in preview.json()['after']['rows'] if h['id']=='stop-home')
+    assert house['stop_distance']==40
+    assert house['stop_distance']<next(h for h in without.json()['after']['rows'] if h['id']=='stop-home')['stop_distance']
+    p=c.post('/api/proposals',json={'actions':actions,'base_version':0});assert p.status_code==201,p.text
+    assert decide(c,p.json()['id']).status_code==200
+    assert c.get('/api/city').json()['metrics']==preview.json()['after']

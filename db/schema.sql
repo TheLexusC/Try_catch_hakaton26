@@ -94,3 +94,20 @@ CREATE TABLE IF NOT EXISTS demolition_policy_history (
  id bigserial PRIMARY KEY, district_id text NOT NULL REFERENCES districts(id),
  moderator_id text NOT NULL REFERENCES users(id), old_limit bigint NOT NULL, new_limit bigint NOT NULL, created_at text NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS planning_areas (
+ id text PRIMARY KEY,district_id text NOT NULL REFERENCES districts(id),name text NOT NULL,
+ x double precision NOT NULL,y double precision NOT NULL,width double precision NOT NULL,height double precision NOT NULL,geom jsonb NOT NULL
+);
+CREATE TABLE IF NOT EXISTS scenarios (
+ id text PRIMARY KEY,district_id text NOT NULL REFERENCES districts(id),author_id text NOT NULL REFERENCES users(id),
+ name text NOT NULL,actions jsonb NOT NULL,base_version integer NOT NULL,created_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS scenarios_author ON scenarios(author_id,district_id);
+
+ALTER TABLE objects DROP CONSTRAINT IF EXISTS objects_kind_check;
+ALTER TABLE objects ADD CONSTRAINT objects_kind_check CHECK(kind IN ('home','building','stop','park','school','clinic','shop','parking','greenery'));
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS action_names jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS demo_backups (
+ id bigserial PRIMARY KEY,district_id text NOT NULL REFERENCES districts(id),payload jsonb NOT NULL,created_at text NOT NULL
+);

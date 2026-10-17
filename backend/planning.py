@@ -3,8 +3,8 @@ from math import ceil,hypot
 from .data import apply_action
 from .geo import project
 
-PRICES={'add_stop':500_000,'add_park':2_000_000,'move_stop':150_000,'remove_stop':100_000,'remove_park':300_000,'close_edge':50_000,'open_edge':25_000}
-LABELS={'add_stop':'Новая остановка','add_park':'Новая зелёная зона','move_stop':'Перенос остановки','demolish_building':'Снос здания','remove_stop':'Удаление остановки','remove_park':'Удаление парка','close_edge':'Перекрытие участка','open_edge':'Открытие участка'}
+PRICES={'add_road':200_000,'add_parking':800_000,'add_greenery':250_000,'remove_parking':100_000,'remove_greenery':50_000,'add_home':6_000_000,'add_area':0,'add_school':4_000_000,'add_clinic':3_000_000,'add_shop':1_000_000,'add_stop':500_000,'add_park':2_000_000,'move_stop':150_000,'remove_stop':100_000,'remove_park':300_000,'close_edge':50_000,'open_edge':25_000}
+LABELS={'add_road':'Новая дорожка','add_parking':'Новая парковка','add_greenery':'Озеленение','remove_parking':'Удаление парковки','remove_greenery':'Удаление озеленения','add_home':'Новый дом','add_area':'Новый район','add_school':'Новая школа','add_clinic':'Новая поликлиника','add_shop':'Новый магазин','add_stop':'Новая остановка','add_park':'Новая зелёная зона','move_stop':'Перенос остановки','demolish_building':'Снос здания','remove_stop':'Удаление остановки','remove_park':'Удаление парка','close_edge':'Перекрытие участка','open_edge':'Открытие участка'}
 BUILDING_KINDS={'home','building','school','clinic','shop'}
 CENTER=project(36.616,55.105)
 
@@ -49,11 +49,13 @@ def plan_changes(state,actions):
         targets.add(key);changed=apply_action(current,action)
         values=action.get('values',{});obj=next((o for o in current['objects'] if o['id']==action['id']),None)
         detail=None
-        if action['entity']=='edge':code='close_edge' if values['closed'] else 'open_edge'
+        if action['entity']=='area':code='add_area'
+        elif action['entity']=='road':code='add_road'
+        elif action['entity']=='edge':code='close_edge' if values['closed'] else 'open_edge'
         elif action['operation']=='add':code='add_'+values['kind']
         elif action['operation']=='update':code='move_stop'
         else:
-            code='remove_'+obj['kind'] if obj['kind'] in {'stop','park'} else 'demolish_building'
+            code='remove_'+obj['kind'] if obj['kind'] in {'stop','park','parking','greenery'} else 'demolish_building'
             if code=='demolish_building':detail=demolition_info(obj,limit)
         name=obj['name'] if obj else values.get('name','Пешеходный участок')
         lines.append(dict(id=action['id'],name=name,label=LABELS[code],amount=detail['amount'] if detail else PRICES[code],demolition=detail))
