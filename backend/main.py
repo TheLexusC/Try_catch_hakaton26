@@ -40,7 +40,7 @@ def digest(value):
 def hash_password(password, salt=None):
     salt = salt or secrets.token_hex(16)
     hashed = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
-    return f'scrypt${salt}${hashed}'
+    return f'scryptsalt{hashed}'
 
 
 def verify_password(password, stored):
@@ -93,7 +93,8 @@ def create_app(db_path=DATABASE):
                 chunks = []
                 async for chunk in request.stream():
                     size += len(chunk)
-                    if size > 16384:
+                    # ИСПРАВЛЕНО: Увеличен лимит до 5 Мегабайт
+                    if size > 5242880:
                         return JSONResponse({'detail': 'Слишком большой запрос'}, status_code=413)
                     chunks.append(chunk)
                 request._body = b''.join(chunks)
@@ -307,7 +308,6 @@ def create_app(db_path=DATABASE):
 
     @app.post('/api/proposals/{proposal_id}/decision')
     def decide(proposal_id: str, payload: Decision, user=Depends(moderator)):
-        # One transaction guards state version, approval and audit fields against races.
         with connect(db_path) as db:
             db.execute('SELECT pg_advisory_xact_lock(204027)')
             row = db.execute('SELECT * FROM proposals WHERE id=%s AND district_id=%s', (proposal_id, DISTRICT)).fetchone()
@@ -352,7 +352,6 @@ def create_app(db_path=DATABASE):
                     for row in saved[table]:
                         if table=='proposals' and row['status']=='pending' and row['base_version']==original_version:
                             row['base_version']=restored['version']
-                        # All columns come from our own database backup, never from request data.
                         cols=list(row);values=[Jsonb(row[k]) if k in {'action','actions','action_names'} else row[k] for k in cols]
                         db.execute(f'INSERT INTO {table}({",".join(cols)}) VALUES({",".join(["%s"]*len(cols))})',values)
                 db.execute('DELETE FROM demo_backups WHERE id=%s',(backup['id'],))
@@ -419,7 +418,6 @@ def create_app(db_path=DATABASE):
         return {'before':calculate_metrics(state,payload.park_radius,payload.park_radii),'after':calculate_metrics(after,payload.park_radius,payload.park_radii),
                 'state':after,'estimate':estimate,'actions':row['actions'],'base_version':state['version'],'rebased':row['base_version']!=state['version'],'name':row['name']}
 
-    # The built React app is served from the same origin as the API.
     dist = Path(__file__).parent.parent / 'frontend' / 'dist'
     if dist.is_dir():
         app.mount('/', StaticFiles(directory=dist, html=True), name='frontend')

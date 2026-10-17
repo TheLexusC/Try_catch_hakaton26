@@ -45,7 +45,6 @@ def calculate_metrics(state,radius=500,radii=None):
     rows=[]
     for home in (o for o in state['objects'] if o['kind']=='home'):
         stop,sp,st=route(home,stop_search);park,pp,pt=route(home,park_search)
-        # Geometry is already in the map response; analytics rows need no polygon copy.
         row={k:v for k,v in home.items() if k!='geom'}
         routes={}
         for kind,path,target in [('stop',sp,st),('park',pp,pt)]:
@@ -56,9 +55,12 @@ def calculate_metrics(state,radius=500,radii=None):
                          stop_path=[n for n in sp if n not in virtual],park_path=[n for n in pp if n not in virtual],stop_target=st,park_target=pt,park_access=park is not None and round(park,1)<=radius))
     reachable=[r['stop_distance'] for r in rows if r['stop_distance'] is not None]
     total=sum(r['residents'] for r in rows);accessible=sum(r['residents'] for r in rows if r['park_access'])
-    # Unknown OSM occupancy is not measured load; only populated capacity records contribute.
     facilities=[o for o in state['objects'] if o['kind'] not in {'home','building'}]
-    capacity=sum(o['capacity'] for o in facilities);load=sum(o['load'] for o in facilities)
+    
+    # ИСПРАВЛЕНО: Безопасное получение значений capacity и load через метод .get()
+    capacity=sum(o.get('capacity', 0) for o in facilities)
+    load=sum(o.get('load', 0) for o in facilities)
+    
     radii=sorted(set([*(radii or [100,200,300,500,1000]),radius]))
     park_table=[dict(radius=r,residents=sum(h['residents'] for h in rows if h['park_distance'] is not None and h['park_distance']<=r)) for r in radii]
     for entry in park_table:entry['percent']=round(100*entry['residents']/total,1) if total else 0
@@ -73,7 +75,7 @@ def calculate_metrics(state,radius=500,radii=None):
     return dict(transport_access=round(100*transport_residents/total,1) if total else 0,transport_radius=500,
                 facility_provision=round(len(facilities)*1000/total,3) if total else 0,provision=provision,park_table=park_table,areas=area_rows,average_stop=round(sum(reachable)/len(reachable),1) if reachable else None,park_percent=round(100*accessible/total,1) if total else 0,
                 accessible_residents=accessible,total_residents=total,unreachable_homes=len(rows)-len(reachable),home_count=len(rows),
-                utilization=round(100*load/capacity,1) if capacity else 0,overloaded=sum(o['load']>o['capacity'] for o in facilities),radius=radius,rows=rows)
+                utilization=round(100*load/capacity,1) if capacity else 0,overloaded=sum(o.get('load', 0)>o.get('capacity', 0) for o in facilities),radius=radius,rows=rows)
 
 
 def inside_polygon(point,ring):
