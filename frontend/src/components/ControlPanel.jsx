@@ -1,6 +1,108 @@
-import React,{useState} from 'react';
-const tools=[['inspect','↗','Изучить город','Выберите объект на карте'],['delete','⌫','Предложить снос','Выберите здание для заявки на снос'],['add_home','⌂','Новый дом','Место, размеры и жители'],['add_area','▱','Новый район','Название и граница'],['add_object','+','Инфраструктура','Остановка, парк и другие объекты'],['move_stop','⇄','Перенести остановку','Остановка и новое место'],['edge','⊘','Перекрыть дорожку','Нажмите на участок сети']];
-export default function ControlPanel({mode,setMode,user,onLogin,busy,stops=[],movingStop,onMoveStop,onRules,objects=[],onFocus}){
-  const [query,setQuery]=useState('');const found=query.trim()?objects.filter(o=>o.name.toLowerCase().includes(query.toLowerCase())).slice(0,8):[];
-  return <aside className="control-panel"><div className="section-kicker">ИНСТРУМЕНТЫ</div><h2>План города</h2><label className="field">Найти объект<input aria-label="Поиск на карте" placeholder="Адрес или название" value={query} onChange={e=>setQuery(e.target.value)}/></label>{found.length>0&&<div className="map-search-results">{found.map(o=><button key={o.id} onClick={()=>{onFocus(o);setQuery('');}}>{o.name}</button>)}</div>}<div className="tools">{tools.map(([id,icon,name,note])=><button key={id} className={'tool '+(id===mode?'active':'')} aria-pressed={id===mode} disabled={busy} onClick={()=>setMode(id)}><span className="tool-icon">{icon}</span><span><strong>{name}</strong><small>{note}</small></span></button>)}</div>{mode==='move_stop'&&<label className="field">Остановка<select aria-label="Остановка для переноса" value={movingStop?.id||''} onChange={e=>{const s=stops.find(o=>o.id===e.target.value);if(s)onMoveStop(s);}}><option value="">Выберите остановку…</option>{stops.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select><small>Затем нажмите на новое место на карте.</small></label>}<button className="text-button rules-button" onClick={onRules}>Правила пользования</button>{!user&&<button className="secondary full" onClick={onLogin}>Войти для предложений</button>}</aside>;
+import React, { useState } from 'react';
+
+const tools = [
+  ['inspect', '↗', 'Изучить город', 'Выберите объект на карте'],
+  ['delete', '⌫', 'Предложить снос', 'Выберите здание для заявки на снос'],
+  ['add_home', '⌂', 'Новый дом', 'Место, размеры и жители'],
+  ['add_area', '▱', 'Новый район', 'Название и граница'],
+  ['add_object', '+', 'Инфраструктура', 'Остановка, парк и другие объекты'],
+  ['move_stop', '⇄', 'Перенести остановку', 'Остановка и новое место'],
+  ['edge', '⊘', 'Перекрыть дорожку', 'Нажмите на участок сети']
+];
+
+export default function ControlPanel({ 
+  mode, 
+  setMode, 
+  user, 
+  onLogin, 
+  busy, 
+  stops = [], 
+  movingStop, 
+  onMoveStop, 
+  onRules, 
+  objects = [], 
+  onFocus 
+}) {
+  const [query, setQuery] = useState('');
+  
+  const found = query.trim() 
+    ? objects.filter(o => o.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8) 
+    : [];
+
+  return (
+    <aside className="control-panel">
+      <div className="section-kicker">ИНСТРУМЕНТЫ</div>
+      <h2>План города</h2>
+      
+      <label className="field">
+        Найти объект
+        <input 
+          aria-label="Поиск на карте" 
+          placeholder="Адрес или название" 
+          value={query} 
+          onChange={e => setQuery(e.target.value)}
+        />
+      </label>
+      
+      {found.length > 0 && (
+        <div className="map-search-results">
+          {found.map(o => (
+            <button key={o.id} onClick={() => { onFocus(o); setQuery(''); }}>
+              {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+      
+      <div className="tools">
+        {tools.map(([id, icon, name, note]) => (
+          <button 
+            key={id} 
+            className={`tool ${id === mode ? 'active' : ''}`} 
+            aria-pressed={id === mode} 
+            disabled={busy} 
+            onClick={() => setMode(id)}
+          >
+            <span className="tool-icon">{icon}</span>
+            <span>
+              <strong>{name}</strong>
+              <small>{note}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+      
+      {mode === 'move_stop' && (
+        <label className="field">
+          Остановка
+          <select 
+            aria-label="Остановка для переноса" 
+            value={movingStop?.id || ''} 
+            onChange={e => {
+              const s = stops.find(o => o.id === e.target.value);
+              if (s) onMoveStop(s);
+            }}
+          >
+            <option value="">Выберите остановку…</option>
+            {stops.map(o => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+          <small>Затем нажмите на новое место на карте.</small>
+        </label>
+      )}
+      
+      <button className="text-button rules-button" onClick={onRules}>
+        Правила пользования
+      </button>
+      
+      {!user && (
+        <button className="secondary full" onClick={onLogin}>
+          Войти для предложений
+        </button>
+      )}
+    </aside>
+  );
 }
+
+
