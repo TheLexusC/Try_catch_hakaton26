@@ -113,3 +113,5 @@ CREATE TABLE IF NOT EXISTS demo_backups (
 );
 
 ALTER TABLE districts ADD COLUMN IF NOT EXISTS population_model_version integer NOT NULL DEFAULT 0;
+
+ALTER TABLE districts ADD COLUMN IF NOT EXISTS work_limits jsonb NOT NULL DEFAULT '{}'::jsonb;

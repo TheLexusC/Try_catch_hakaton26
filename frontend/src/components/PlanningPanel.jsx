@@ -1,5 +1,7 @@
 import React from 'react';
 
+const workTypes = {'move_stop': ['Перенос остановки', 150000], 'add_stop': ['Новая остановка', 500000], 'add_home': ['Новый дом', 6000000], 'add_park': ['Новый парк', 2000000], 'add_parking': ['Парковка', 800000], 'add_greenery': ['Озеленение', 250000], 'add_school': ['Школа', 4000000], 'add_clinic': ['Поликлиника', 3000000], 'add_shop': ['Магазин', 1000000], 'add_road': ['Дорожка', 200000], 'add_area': ['Район', 0], 'remove_stop': ['Удаление остановки', 100000], 'remove_park': ['Удаление парка', 300000], 'remove_parking': ['Удаление парковки', 100000], 'remove_greenery': ['Удаление озеленения', 50000], 'close_edge': ['Перекрытие дорожки', 50000], 'open_edge': ['Открытие дорожки', 25000]};
+
 export const money = n => new Intl.NumberFormat('ru-RU', { 
   style: 'currency', 
   currency: 'RUB', 
@@ -56,7 +58,7 @@ export function Estimate({ estimate }) {
   );
 }
 
-export default function PlanningPanel({ policy, user, bundle, objects, busy, onRemove, onPreview, onBudget }) {
+export default function PlanningPanel({ policy, user, bundle, objects, busy, onRemove, onPreview, onBudget, workLimits, onWorkLimits }) {
   return (
     <section className="planning-panel">
       <details className="demolition-settings">
@@ -79,6 +81,20 @@ export default function PlanningPanel({ policy, user, bundle, objects, busy, onR
         </div>
       </details>
       
+
+      <details className="demolition-settings work-limit-settings">
+        <summary>Бюджеты строительства и других работ</summary>
+        <p>Для каждого вида — отдельный лимит на один проект. Пустое поле означает отсутствие ограничения. Стоимости учебные.</p>
+        <form onSubmit={onWorkLimits}>
+          <div className="work-limits-grid">
+            {Object.entries(workTypes).map(([code,[label,price]])=><label className="field" key={code}>
+              {label} · {money(price)} за действие
+              <input aria-label={'Бюджет: '+label} name={code} type="number" min="0" max="1000000000000" step="1" placeholder="Без ограничения" defaultValue={workLimits?.[code]??''} key={code+':'+workLimits?.[code]} disabled={!['admin','moderator'].includes(user?.role)||busy}/>
+            </label>)}
+          </div>
+          {['admin','moderator'].includes(user?.role)&&<button className="secondary" disabled={busy}>Сохранить бюджеты работ</button>}
+        </form>
+      </details>
       <details className="bundle-menu">
         <summary>Мой набор изменений ({bundle.actions.length}) — открыть / закрыть</summary>
         {!user ? (
@@ -86,7 +102,7 @@ export default function PlanningPanel({ policy, user, bundle, objects, busy, onR
         ) : (
           <>
             <p>Добавляйте изменения на карте кнопкой «Добавить ещё» в предпросмотре. Все изменения набора отправляются одной заявкой и применяются вместе.</p>
-            <small>Черновик сохранён в этом браузере отдельно для вашего аккаунта. После обновления карты нужно пересобрать набор.</small>
+            <small>Черновик сохранён в этом браузере отдельно для вашего аккаунта. Расчёт выполняется по текущей карте.</small>
             {bundle.actions.length > 0 ? (
               <>
                 <ol>

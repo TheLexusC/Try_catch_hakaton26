@@ -58,11 +58,18 @@ def plan_changes(state,actions):
             code='remove_'+obj['kind'] if obj['kind'] in {'stop','park','parking','greenery'} else 'demolish_building'
             if code=='demolish_building':detail=demolition_info(obj,limit)
         name=obj['name'] if obj else values.get('name','Пешеходный участок')
-        lines.append(dict(id=action['id'],name=name,label=LABELS[code],amount=detail['amount'] if detail else PRICES[code],demolition=detail))
+        lines.append(dict(code=code,id=action['id'],name=name,label=LABELS[code],amount=detail['amount'] if detail else PRICES[code],demolition=detail))
         current=changed
     blocked=[dict(id=l['id'],name=l['name'],**l['demolition']) for l in lines if l['demolition'] and not l['demolition']['allowed']]
+    totals={}
+    for line in lines:
+        if line['code']!='demolish_building':totals[line['code']]=totals.get(line['code'],0)+line['amount']
+    for code,amount in totals.items():
+        cap=state.get('work_limits',{}).get(code)
+        if cap is not None and amount>cap:
+            blocked.append(dict(id=code,name=LABELS[code],reason=f'Стоимость работ {amount:,} ₽ превышает лимит {cap:,} ₽ для этого вида работ.'.replace(',',' ')))
     return current,dict(total=sum(l['amount'] for l in lines),limit=limit,can_submit=not blocked,blocked=blocked,lines=lines,
-                        note='Учебная оценка, не рыночная смета. Порог действует на снос каждого здания отдельно. Общего бюджета и списания денег нет.')
+                        note='Учебная оценка, не рыночная смета. Порог действует на снос каждого здания отдельно. Лимиты остальных работ действуют отдельно по каждому виду на весь проект. Неустановленный лимит не ограничивает работы; списания денег нет.')
 
 
 def blocking_reason(estimate):

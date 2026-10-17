@@ -1,7 +1,7 @@
 """Strict API contracts. Clients cannot assign roles or moderation status."""
 from typing import Literal
 import re
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import StrictInt, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -128,3 +128,17 @@ class HomeLayout(StrictModel):
     houses: list[HomeSpec] = Field(min_length=1,max_length=20)
     boundary: list[Point] = Field(default_factory=list,max_length=60)
     roads: list[list[Point]] = Field(default_factory=list,max_length=19)
+
+
+class WorkLimits(StrictModel):
+    limits: dict[str, StrictInt | None]
+
+    @field_validator('limits')
+    @classmethod
+    def valid_limits(cls, values):
+        from .planning import PRICES
+        if any(k not in PRICES for k in values):
+            raise ValueError('Неизвестный вид работ')
+        if any(v is not None and not 0 <= v <= 1_000_000_000_000 for v in values.values()):
+            raise ValueError('Лимит должен быть от 0 до 1 000 000 000 000 ₽')
+        return values

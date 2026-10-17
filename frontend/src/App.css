@@ -2180,3 +2180,7 @@ blockquote {
 
 .metrics-scope-title{margin:24px 0 14px;font:600 17px Montserrat,sans-serif}
 .district-navigation{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 16px;padding:14px;background:#edf6fd;border:1px solid #c6dfef;border-radius:8px}.district-navigation p{width:100%;font-size:12px;line-height:1.6;color:#486b85}.map-drawing-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%}.map-drawing-error{width:100%;padding:9px 12px;background:#fff0ed;color:#9d3b29;font-size:12px;border-radius:5px}
+
+.work-limit-settings{margin-top:18px}.work-limit-settings>p{font-size:12px;line-height:1.7}.work-limits-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:18px 0}.work-limits-grid .field{margin:0;font-size:12px}
+
+.infrastructure-tools>p{font-size:12px;line-height:1.7}.road-controls{display:flex;flex-direction:column;gap:9px;margin:14px 0}.road-controls>span{font-size:12px}.stop-cursor-line{pointer-events:none}

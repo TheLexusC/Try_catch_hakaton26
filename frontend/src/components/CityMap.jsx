@@ -302,6 +302,16 @@ export default function CityMap(props) {
     }
   },[props.movingStopId,props.relocation?.before?.id,props.relocation?.before?.x,props.relocation?.before?.y,props.relocation?.after?.x,props.relocation?.after?.y]);
   useEffect(()=>{
+    const instance=map.current;
+    const selected=state.objects.find(o=>o.id===props.movingStopId);
+    if(!instance || compact || mode!=='move_stop' || !selected)return;
+    const line=L.polyline([],{color:'#158bcc',weight:3,dashArray:'7 5',interactive:false,className:'stop-cursor-line'}).addTo(instance);
+    const follow=event=>line.setLatLngs([latlng(selected),event.latlng]);
+    const clear=()=>line.setLatLngs([]);
+    instance.on('mousemove',follow);instance.on('mouseout',clear);instance.on('click',clear);
+    return()=>{instance.off('mousemove',follow);instance.off('mouseout',clear);instance.off('click',clear);instance.removeLayer(line);};
+  },[mode,props.movingStopId,compact,state.objects]);
+  useEffect(()=>{
     const instance=map.current;if(!instance)return;
     if(layers.current.areas)instance.removeLayer(layers.current.areas);
     const group=L.layerGroup().addTo(instance);layers.current.areas=group;

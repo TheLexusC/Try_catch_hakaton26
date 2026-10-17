@@ -23,7 +23,7 @@ from .data import DATABASE, METADATA, apply_action, connect, initialize, read_st
 from .seed import DISTRICT
 from .metrics import calculate_metrics
 from .planning import plan_changes, PRICES, LABELS, annotate_costs, blocking_reason
-from .schemas import Credentials, Decision, Preview, Proposal, Registration, BudgetUpdate, ScenarioSave, ScenarioCompare, AnalysisOptions, DemoReset, HomeLayout
+from .schemas import Credentials, Decision, Preview, Proposal, Registration, BudgetUpdate, WorkLimits, ScenarioSave, ScenarioCompare, AnalysisOptions, DemoReset, HomeLayout
 
 SESSION_TTL = 7 * 24 * 3600
 COOKIE = 'obninsk_session'
@@ -149,8 +149,6 @@ def create_app(db_path=DATABASE):
         return user
 
     def checked_change(state, payload):
-        if state['version'] != payload.base_version:
-            raise HTTPException(409, 'Карта обновилась. Обновите карту и создайте новое предложение.')
         try:
             return plan_changes(state, payload.changes())
         except PermissionError as error:
@@ -240,6 +238,18 @@ def create_app(db_path=DATABASE):
             db.execute('INSERT INTO demolition_policy_history(district_id,moderator_id,old_limit,new_limit,created_at) VALUES(%s,%s,%s,%s,%s)',
                        (DISTRICT,user['id'],old,payload.limit,now()))
         return {'limit':payload.limit,'mode':'per_building'}
+
+    @app.get('/api/work-limits')
+    def get_work_limits():
+        with connect(db_path) as db: limits=read_state(db)['work_limits']
+        return {'limits':limits,'prices':PRICES,'labels':LABELS}
+
+    @app.post('/api/work-limits')
+    def update_work_limits(payload: WorkLimits, user=Depends(moderator)):
+        with connect(db_path) as db:
+            read_state(db,write=True)
+            db.execute('UPDATE districts SET work_limits=work_limits || %s WHERE id=%s',(Jsonb(payload.limits),DISTRICT))
+        return get_work_limits()
 
     @app.post('/api/layout/fit')
     def layout_fit(payload: HomeLayout,user=Depends(current_session)):

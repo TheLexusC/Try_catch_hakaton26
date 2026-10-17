@@ -11,7 +11,7 @@ const tools = [
 ];
 
 export default function ControlPanel({ 
-  mode, 
+  mode, infraKind, onInfrastructure, roadControls,
   setMode, 
   user, 
   onLogin, 
@@ -58,8 +58,8 @@ export default function ControlPanel({
         {tools.map(([id, icon, name, note]) => (
           <button 
             key={id} 
-            className={`tool ${id === mode ? 'active' : ''}`} 
-            aria-pressed={id === mode} 
+            className={`tool ${(id === mode || (id === 'add_object' && mode === 'draw_road')) ? 'active' : ''}`}
+            aria-pressed={(id === mode || (id === 'add_object' && mode === 'draw_road'))}
             disabled={busy} 
             onClick={() => setMode(id)}
           >
@@ -72,6 +72,12 @@ export default function ControlPanel({
         ))}
       </div>
       
+      {['add_object','draw_road'].includes(mode) && <div className="infrastructure-tools">
+        <label className="field">Вид инфраструктуры<select aria-label="Вид инфраструктуры" value={infraKind} onChange={e=>onInfrastructure(e.target.value)}>
+          <option value="park">Парк</option><option value="stop">Остановка</option><option value="road">Дорога</option><option value="parking">Парковка</option><option value="greenery">Озеленение</option><option value="school">Школа</option><option value="clinic">Поликлиника</option><option value="shop">Магазин</option>
+        </select></label>
+        {mode==='draw_road'&&<><p>Отметьте линию дороги кликами на карте, затем завершите её. Минимум 2 точки, максимум 60.</p><div className="road-controls">{roadControls}</div></>}
+      </div>}
       {mode === 'move_stop' && (
         <label className="field">
           Остановка

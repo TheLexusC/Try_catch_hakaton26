@@ -111,14 +111,13 @@ def test_private_requests_and_self_review(env):
     assert decide(c,pid).status_code==403
     other.close()
 
-def test_stale_approval_and_submission(env):
+def test_stale_approval_and_submission_use_current_map(env):
     app,c,path=env;register(c);one=proposal(c,0).json()['id'];two=proposal(c,1).json()['id'];mod=moderator(app,path)
     assert decide(mod,one).status_code==200
-    assert decide(mod,two).status_code==409
-    assert proposal(c,2,0).status_code==409
-    assert mod.get(f'/api/proposals/{two}/preview').status_code==409
-    assert decide(mod,two,'rejected').status_code==200
-    assert c.get('/api/city').json()['state']['version']==1
+    assert mod.get(f'/api/proposals/{two}/preview').status_code==200
+    assert decide(mod,two).status_code==200
+    assert proposal(c,2,0).status_code==201
+    assert c.get('/api/city').json()['state']['version']==2
     mod.close()
 
 def test_duplicate_and_invalid_actions(env):
@@ -612,3 +611,27 @@ def test_population_recalibration_preserves_proposals_and_project_residents(env,
     monkeypatch.setattr(data,'seed_state',lambda:{'objects':[{'id':'h1','kind':'home','residents':1}]})
     data.initialize(path)
     with connect(path) as db:assert db.execute("SELECT residents FROM objects WHERE id='h1'").fetchone()['residents']==133000
+
+
+def test_work_limits_persist_sum_by_type_and_apply_on_approval(env):
+    app,c,dsn=env;register(c);mod=moderator(app,dsn)
+    actions=[dict(entity='object',operation='add',id='budget-park-'+str(i),values=dict(name='Сквер',kind='park',x=800+i*20,y=700)) for i in range(2)]
+    payload=dict(actions=actions,base_version=900)
+    assert c.post('/api/work-limits',json={'limits':{'add_park':3_000_000}}).status_code==403
+    assert mod.post('/api/work-limits',json={'limits':{'add_park':3_000_000,'move_stop':100_000}}).status_code==200
+    assert c.get('/api/city').json()['state']['work_limits']['add_park']==3_000_000
+    estimate=c.post('/api/preview',json=payload).json()['estimate']
+    assert estimate['total']==4_000_000 and not estimate['can_submit']
+    assert c.post('/api/proposals',json=payload).status_code==422
+    assert mod.post('/api/work-limits',json={'limits':{'add_park':4_000_000}}).status_code==200
+    r=c.post('/api/proposals',json=payload);assert r.status_code==201,r.text
+    pid=r.json()['id']
+    mod.post('/api/work-limits',json={'limits':{'add_park':0}})
+    assert decide(mod,pid).status_code==409
+    mod.post('/api/work-limits',json={'limits':{'add_park':None}})
+    assert decide(mod,pid).status_code==200
+    stop=dict(action=dict(entity='object',operation='update',id='s1',values=dict(x=700,y=600)),base_version=0)
+    assert not c.post('/api/preview',json=stop).json()['estimate']['can_submit']
+    for limits in ({'oops':5},{'add_park':-1},{'add_park':True},{'add_park':1.5}):
+        assert mod.post('/api/work-limits',json={'limits':limits}).status_code==422
+    mod.close()
