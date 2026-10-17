@@ -107,9 +107,9 @@ p {
    ========================================================================== */
 
 button.primary {
-  background: var(--green);
+  background: linear-gradient(to bottom right, #65C3FF, #269DE5);
   color: white;
-  border: 1px solid var(--green);
+  border: none;
   padding: 13px 20px;
   border-radius: 8px;
   font-size: 13px;
@@ -117,20 +117,20 @@ button.primary {
 }
 
 button.primary:hover:not(:disabled) {
-  background: #269DE5;
+  background: linear-gradient(to bottom right, #52B8F4, #218FD0);
   box-shadow: 0 3px 10px #19384D20;
 }
 
 .secondary {
-  border: 1px solid #CCD3D8;
+  border: none;
   border-radius: 8px;
   padding: 12px 18px;
-  background: white;
+  background: linear-gradient(to bottom right, #FFFFFF, #E8ECEF);
   font-size: 13px;
 }
 
 .secondary:hover:not(:disabled) {
-  background: #EBF0F3;
+  background: linear-gradient(to bottom right, #F5F7F8, #DCE2E6);
 }
 
 .text-button {
