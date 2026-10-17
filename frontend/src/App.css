@@ -109,7 +109,7 @@ p {
 button.primary {
   background: linear-gradient(to bottom right, #65C3FF, #269DE5);
   color: white;
-  border: none;
+  border: 1px solid #278FCC;
   padding: 13px 20px;
   border-radius: 8px;
   font-size: 13px;
@@ -122,7 +122,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .secondary {
-  border: none;
+  border: 1px solid #D5DCE1;
   border-radius: 8px;
   padding: 12px 18px;
   background: linear-gradient(to bottom right, #FFFFFF, #E8ECEF);
@@ -187,25 +187,11 @@ button.primary:hover:not(:disabled) {
   font-weight: 500;
 }
 
-.brand-mark {
-  background: #213B4D;
-  border-radius: 9px;
-  color: #fff;
-  font-size: 34px;
+.brand-logo {
   width: 48px;
   height: 48px;
-  line-height: 44px;
-  text-align: center;
-  position: relative;
-  font-weight: 400;
-}
-
-.brand-mark span {
-  position: absolute;
-  right: 5px;
-  top: -4px;
-  font-size: 18px;
-  color: var(--green);
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .site-header nav {
@@ -1765,11 +1751,9 @@ blockquote {
     font-size: 15px;
   }
 
-  .brand-mark {
+  .brand-logo {
     width: 38px;
     height: 38px;
-    line-height: 34px;
-    font-size: 27px;
   }
 
   .site-header nav {

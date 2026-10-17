@@ -1,5 +1,6 @@
 import React, {useCallback,useEffect,useRef,useState,useId} from 'react';
 import {newId} from './ids.js';
+import logo from './components/2040_transparent.svg';
 import DistrictBuilder from './components/DistrictBuilder.jsx';
 import CityMap,{kinds} from './components/CityMap.jsx';
 import AnalyticsPanel,{radiusMetrics,ParkTable} from './components/AnalyticsPanel.jsx';
@@ -152,7 +153,7 @@ export default function App(){
 
 
   return <>
-    <header className="site-header"><a className="brand" href="/"><span className="brand-mark">о<span>↗</span></span><span>ОБНИНСК <b>2040</b><small>КОНСТРУКТОР ГОРОДА</small></span></a><nav aria-label="Навигация"><button className={tab==='map'?'nav-active':''} onClick={()=>setTab('map')}>Карта города</button><button className={tab==='requests'?'nav-active':''} onClick={()=>{setTab('requests');if(user)loadRequests().catch(e=>setError(e.message));}}>{canModerate?'Модерация':'Мои заявки'} {pending>0&&<span className="count">{pending}</span>}</button></nav><div className="account">{user?<><span className="account-name">{user.name}<small>{user.role==='admin'?'Администратор':canModerate?'Модератор':'Житель'}</small></span><button className="text-button" disabled={busy} onClick={logout}>Выйти</button></>:<><button className="text-button" onClick={()=>login('login')}>Войти</button><button className="primary small" onClick={()=>login('register')}>Регистрация</button></>}</div></header>
+    <header className="site-header"><a className="brand" href="/"><img className="brand-logo" src={logo} alt="" /><span>ОБНИНСК <b>2040</b><small>КОНСТРУКТОР ГОРОДА</small></span></a><nav aria-label="Навигация"><button className={tab==='map'?'nav-active':''} onClick={()=>setTab('map')}>Карта города</button><button className={tab==='requests'?'nav-active':''} onClick={()=>{setTab('requests');if(user)loadRequests().catch(e=>setError(e.message));}}>{canModerate?'Модерация':'Мои заявки'} {pending>0&&<span className="count">{pending}</span>}</button></nav><div className="account">{user?<><span className="account-name">{user.name}<small>{user.role==='admin'?'Администратор':canModerate?'Модератор':'Житель'}</small></span><button className="text-button" disabled={busy} onClick={logout}>Выйти</button></>:<><button className="text-button" onClick={()=>login('login')}>Войти</button><button className="primary small" onClick={()=>login('register')}>Регистрация</button></>}</div></header>
     <main>
       {error&&<div className="banner error" role="alert">{error}<button aria-label="Скрыть ошибку" onClick={()=>setError('')}>×</button></div>}
       {notice&&<div className="banner success" role="status">{notice}<button aria-label="Скрыть уведомление" onClick={()=>setNotice('')}>×</button></div>}
